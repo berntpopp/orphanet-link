@@ -1,0 +1,26 @@
+# Build artifacts / data
+data/*.sqlite
+data/*.sqlite-*
+data/*.gz
+data/*.xml
+data/*.owl
+data/download_cache.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Env / OS
+.env
+.env.local
+.DS_Store
