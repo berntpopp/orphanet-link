@@ -88,7 +88,7 @@ _SUMMARY_KEYS: tuple[str, ...] = (
 
 
 #: capabilities_version is a content hash of the discovery CONTRACT, cached per
-#: Mondo release so the per-call envelope echo never re-derives it. ``build`` (the
+#: Orphanet release so the per-call envelope echo never re-derives it. ``build`` (the
 #: per-deploy git sha / timestamp) and the self-hash are excluded so unrelated
 #: redeploys do not churn the value -- a warm client diffs it to skip re-fetching.
 _HASH_EXCLUDE: frozenset[str] = frozenset({"build", "capabilities_version"})
@@ -96,7 +96,7 @@ _VERSION_CACHE: dict[str, str] = {}
 
 
 def _orphanet_version() -> str | None:
-    """Best-effort loaded Mondo release (never raises, never forces a build)."""
+    """Best-effort loaded Orphanet release (never raises, never forces a build)."""
     try:
         diag = get_orphanet_service().get_diagnostics()
     except Exception:  # pragma: no cover - discovery must never fail on data
@@ -144,7 +144,7 @@ def build_capabilities() -> dict[str, Any]:
         "xref_prefixes": list(XREF_PREFIXES),
         "predicate_rank": dict(PREDICATE_RANK),
         "provenance_policy": (
-            "Static provenance (research-use restriction, citation, Mondo release) "
+            "Static provenance (research-use restriction, citation, Orphanet release) "
             "is declared here and applies to ALL tool outputs; it is not repeated "
             "per-call to conserve context tokens."
         ),
@@ -197,14 +197,14 @@ def build_capabilities() -> dict[str, Any]:
             "standard/full return the complete record (structured synonyms with "
             "scope/type/sources, and the full definition on search hits); compact "
             "(default) drops null/empty values, collapses synonyms to plain strings, "
-            "and returns search hits as mondo_id + name + score + a short "
-            "definition_snippet; minimal keeps only mondo_id + name."
+            "and returns search hits as orpha_code + name + score + a short "
+            "definition_snippet; minimal keeps only orpha_code + name."
         ),
         "match_type_semantics": (
-            "resolve_disease.match_type is one of mondo_id | primary | exact_synonym "
-            "| related_synonym | fuzzy | xref (strongest first). 'fuzzy' is a "
-            "conservative FTS fallback returned only for a near-miss/acronym label "
-            "with no exact match; a near-tie returns ambiguous_query instead."
+            "resolve_disease.match_type is one of orpha_code | exact_label | search "
+            "| xref (strongest first). 'search' is a conservative FTS fallback "
+            "returned only for a near-miss/acronym label with no exact match; a "
+            "near-tie returns ambiguous_query instead."
         ),
         "predicate_ranking": (
             "Cross-references are ranked by mapping predicate, strongest first: "
@@ -226,7 +226,7 @@ def build_capabilities() -> dict[str, Any]:
         "not_found_contract": (
             "An id/label/xref with no term returns error_code 'not_found'. An "
             "ambiguous label returns 'ambiguous_query' with candidates and "
-            "next_commands to each candidate. An obsolete MONDO id returns "
+            "next_commands to each candidate. An obsolete ORPHAcode returns "
             "'not_found' with replaced_by successors and next_commands to them."
         ),
         "error_codes": ERROR_CODES,

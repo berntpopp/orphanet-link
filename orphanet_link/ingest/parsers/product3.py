@@ -86,7 +86,10 @@ def parse(path: str | Path, specialty_id: str) -> Product3Result:
         A :class:`Product3Result` with ``edges`` and ``specialty`` populated.
     """
     result = Product3Result()
-    tree = etree.parse(str(path))
+    tree = etree.parse(
+        str(path),
+        parser=etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False),
+    )
     root = tree.getroot()
 
     classification = root.find(".//Classification")

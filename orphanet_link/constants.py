@@ -88,8 +88,8 @@ XREF_PREFIXES: list[str] = ["OMIM", "MONDO", "ICD-10", "ICD-11", "UMLS", "GARD",
 #: Mapping-relation codes ranked by precision (used in capabilities discovery).
 PREDICATE_RANK: dict[str, int] = dict(MAPPING_RELATION_RANK)
 
-#: Match types returned by resolve_disease.
-MATCH_TYPES: list[str] = ["orpha_id", "primary", "exact_synonym", "related_synonym", "xref"]
+#: Match types returned by resolve_disease (mirrors resolution.py cascade).
+MATCH_TYPES: list[str] = ["orpha_code", "xref", "exact_label", "search"]
 
 #: Hard cap on items per batch call.
 MAX_BATCH_ITEMS: int = 50

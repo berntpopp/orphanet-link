@@ -57,10 +57,6 @@ def default_error_next_commands(
     if tool in (
         "resolve_disease",
         "get_disease",
-        "get_ancestors",
-        "get_descendants",
-        "get_parents",
-        "get_children",
         "map_cross_ontology",
         "get_disease_ancestors",
         "get_disease_descendants",

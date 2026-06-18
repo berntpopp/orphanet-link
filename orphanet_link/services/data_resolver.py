@@ -9,10 +9,13 @@ Three public entry points:
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import hashlib
 import logging
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -166,7 +169,15 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
     except OSError as exc:
         raise DataUnavailableError(f"Failed to decompress prebuilt DB: {exc}") from exc
 
-    db_path.write_bytes(db_bytes)
+    fd, tmp_path = tempfile.mkstemp(dir=config.data_dir, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(db_bytes)
+        os.replace(tmp_path, db_path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
     logger.info("fetch_prebuilt wrote db db_path=%s", db_path)
 
     _check_schema(db_path)

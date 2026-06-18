@@ -66,10 +66,19 @@ async def test_resolve_disease_by_orpha_code(facade: FastMCP) -> None:
 
 
 async def test_resolve_disease_meta_source(facade: FastMCP) -> None:
-    """_meta must be present and carry tool name for grounding."""
+    """_meta must be present, carry tool name, and have source == 'orphanet'."""
     result = await _call(facade, "resolve_disease", query=_ORPHA_58)
     assert result["success"] is True
     assert "_meta" in result
+    assert result["_meta"]["source"] == "orphanet"
+
+
+async def test_get_disease_meta_source(facade: FastMCP) -> None:
+    """get_disease _meta must also carry source == 'orphanet'."""
+    result = await _call(facade, "get_disease", term=_ORPHA_KIF7)
+    assert result["success"] is True
+    assert "_meta" in result
+    assert result["_meta"]["source"] == "orphanet"
 
 
 async def test_get_disease_alexander(facade: FastMCP) -> None:

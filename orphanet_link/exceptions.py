@@ -96,7 +96,8 @@ class WithdrawnEntryError(NotFoundError):
         if message is None:
             if self.replaced_by:
                 targets = ", ".join(
-                    f"{r.get('name', '?')} ({r.get('mondo_id', '?')})" for r in self.replaced_by
+                    f"{r.get('name', '?')} ({r.get('orpha_code') or r.get('mondo_id') or '?'})"
+                    for r in self.replaced_by
                 )
                 message = f"{withdrawn} is obsolete in Orphanet ({status}). See: {targets}."
             else:

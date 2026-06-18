@@ -58,7 +58,7 @@ jobs:
           print(sqlite3.connect('data/orphanet.sqlite').execute(
               'select orphanet_version from meta').fetchone()[0])
           ")
-          SLUG=$(echo "$VERSION" | tr -cd '0-9.')
+          SLUG=$(echo "$VERSION" | tr -c '0-9A-Za-z.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
           TAG="data-$SLUG"
           echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

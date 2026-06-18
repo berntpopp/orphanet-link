@@ -128,7 +128,7 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "message": message,
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
-        "_meta": {"tool": context.tool_name, "request_id": _request_id()},
+        "_meta": {"tool": context.tool_name, "request_id": _request_id(), "source": "orphanet"},
     }
     if isinstance(exc, InvalidInputError):
         if exc.field is not None:
@@ -140,7 +140,9 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     if isinstance(exc, AmbiguousQueryError) and exc.candidates:
         envelope["candidates"] = exc.candidates
         envelope["_meta"]["next_commands"] = [
-            cmd("get_disease", term=c["mondo_id"]) for c in exc.candidates[:3] if c.get("mondo_id")
+            cmd("get_disease", term=(c.get("orpha_code") or c.get("mondo_id")))
+            for c in exc.candidates[:3]
+            if c.get("orpha_code") or c.get("mondo_id")
         ] or [cmd("get_server_capabilities")]
         return envelope
     if isinstance(exc, WithdrawnEntryError):
@@ -152,7 +154,9 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     if isinstance(exc, NotFoundError) and exc.suggestions:
         envelope["candidates"] = exc.suggestions
         steps = [
-            cmd("get_disease", term=s["mondo_id"]) for s in exc.suggestions[:3] if s.get("mondo_id")
+            cmd("get_disease", term=(s.get("orpha_code") or s.get("mondo_id")))
+            for s in exc.suggestions[:3]
+            if s.get("orpha_code") or s.get("mondo_id")
         ]
         query = str(context.arguments.get("term", "") or context.arguments.get("query", ""))
         if query:
@@ -199,6 +203,7 @@ def build_arg_error_envelope(
             "_meta": {
                 "tool": tool_name,
                 "request_id": _request_id(),
+                "source": "orphanet",
                 "next_commands": [cmd("get_server_capabilities")],
             },
         }
@@ -222,6 +227,7 @@ def build_arg_error_envelope(
         "_meta": {
             "tool": tool_name,
             "request_id": _request_id(),
+            "source": "orphanet",
             "next_commands": [cmd("get_server_capabilities")],
         },
     }
@@ -250,7 +256,7 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     richer (every default response still chains); ``minimal`` is the documented opt-out.
     """
     if response_mode == "minimal":
-        return {"tool": meta["tool"], "request_id": meta["request_id"]}
+        return {"tool": meta["tool"], "request_id": meta["request_id"], "source": "orphanet"}
     if response_mode in ("standard", "full"):
         return meta
     return {k: v for k, v in meta.items() if k != "elapsed_ms"}
@@ -275,6 +281,7 @@ async def run_mcp_tool(
                 **existing_meta,
                 "tool": tool_name,
                 "request_id": _request_id(),
+                "source": "orphanet",
                 "elapsed_ms": elapsed,
             }
             _stamp_capabilities_version(meta)

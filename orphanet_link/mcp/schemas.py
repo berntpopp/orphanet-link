@@ -1,4 +1,4 @@
-"""JSON output schemas for the typed Mondo MCP tools (MCP structured output).
+"""JSON output schemas for the typed Orphanet MCP tools (MCP structured output).
 
 The schemas are deliberately **permissive** (``additionalProperties: true``,
 nothing ``required``) because ``response_mode`` projects fields out and the error
@@ -89,7 +89,7 @@ DIAGNOSTICS_SCHEMA = _envelope(
 
 RESOLVE_DISEASE_SCHEMA = _envelope(
     query=_STR,
-    mondo_id=_STR_NULL,
+    orpha_code=_STR_NULL,
     name=_STR_NULL,
     definition=_STR_NULL,
     match_type=_STR_NULL,
@@ -101,7 +101,7 @@ _SEARCH_HIT = {
     "type": "object",
     "additionalProperties": True,
     "properties": {
-        "mondo_id": _STR,
+        "orpha_code": _STR,
         "name": _STR,
         "score": {"type": "number"},
         "definition": _STR_NULL,
@@ -122,7 +122,7 @@ SEARCH_SCHEMA = _envelope(
 )
 
 DISEASE_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR,
     definition=_STR_NULL,
     synonyms=_ARR,
@@ -137,7 +137,7 @@ DISEASE_SCHEMA = _envelope(
 )
 
 ANCESTORS_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR_NULL,
     total=_INT,
     returned=_INT,
@@ -149,7 +149,7 @@ ANCESTORS_SCHEMA = _envelope(
 )
 
 DESCENDANTS_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR_NULL,
     total=_INT,
     returned=_INT,
@@ -161,14 +161,14 @@ DESCENDANTS_SCHEMA = _envelope(
 )
 
 PARENTS_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR_NULL,
     count=_INT,
     parents=_ARR,
 )
 
 CHILDREN_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR_NULL,
     count=_INT,
     children=_ARR,
@@ -188,7 +188,7 @@ RESOLVE_XREF_SCHEMA = _envelope(
 )
 
 CROSS_ONTOLOGY_SCHEMA = _envelope(
-    mondo_id=_STR,
+    orpha_code=_STR,
     name=_STR_NULL,
     mappings=_GROUPED_XREFS,
     count=_INT,
@@ -207,7 +207,7 @@ _BATCH_ITEM = {
         "query": _STR,
         "term": _STR,
         "ok": _BOOL,
-        "mondo_id": _STR_NULL,
+        "orpha_code": _STR_NULL,
         "name": _STR_NULL,
         "match_type": _STR_NULL,
         "error_code": _STR,

@@ -38,7 +38,7 @@ def test_product1_parses_xrefs():
     icd11 = next(x for x in xr if x["source"] == "ICD-11")
     assert icd11["object_id"] == "LD24.61"
     assert icd11["mapping_relation"] == "NTBT"
-    assert icd11["icd_relation"] == "Index"  # leading token of the ICD relation name
+    assert icd11["icd_relation"] == "Index term (ICD-10: Orphanet entity listed in the ICD-10 Index. ICD-11: Orphanet entity listed in the ICD-11 Foundation)"  # full ICD relation name
     assert icd11["ref_uri"].startswith("https://icd.who.int")
 
 

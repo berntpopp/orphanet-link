@@ -65,7 +65,7 @@ def parse(path: str | Path) -> Product1Result:
                     "source": c.text(ext, "Source"),
                     "object_id": c.text(ext, "Reference"),
                     "mapping_relation": c.relation_code(c.named(ext, "DisorderMappingRelation")),
-                    "icd_relation": c.relation_code(c.named(ext, "DisorderMappingICDRelation")),
+                    "icd_relation": c.named(ext, "DisorderMappingICDRelation"),
                     "validation_status": c.named(ext, "DisorderMappingValidationStatus"),
                     "ref_uri": c.text(ext, "DisorderMappingICDRefUrl"),
                 }

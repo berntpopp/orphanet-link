@@ -23,7 +23,14 @@ def iter_disorders(
     is driven by the ``item`` tag. Each yielded element is cleared after use,
     along with already-processed previous siblings, to bound memory.
     """
-    context = etree.iterparse(str(path), events=("end",), tag=item)
+    context = etree.iterparse(
+        str(path),
+        events=("end",),
+        tag=item,
+        resolve_entities=False,
+        no_network=True,
+        load_dtd=False,
+    )
     for _event, element in context:
         yield element
         element.clear()
@@ -71,6 +78,13 @@ def to_float(value: str | None) -> float | None:
 
 def jdbor_stamp(path: str | Path) -> tuple[str | None, str | None]:
     """Return ``(date, version)`` from the ``<JDBOR>`` root attributes."""
-    for _event, element in etree.iterparse(str(path), events=("start",), tag="JDBOR"):
+    for _event, element in etree.iterparse(
+        str(path),
+        events=("start",),
+        tag="JDBOR",
+        resolve_entities=False,
+        no_network=True,
+        load_dtd=False,
+    ):
         return element.get("date"), element.get("version")
     return None, None
