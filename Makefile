@@ -82,6 +82,9 @@ data-refresh: ## Conditionally refresh the local index (cron entry point)
 data-status: ## Print the loaded Orphanet release / provenance
 	uv run orphanet-link-data status
 
+data-fetch: ## Download the prebuilt database from the GitHub Release
+	uv run orphanet-link-data fetch
+
 dev: ## Start unified REST + MCP development server
 	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
 

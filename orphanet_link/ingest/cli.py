@@ -2,8 +2,8 @@
 
 Exposed as the ``orphanet-link-data`` console script and intended as the cron
 entry point.  Commands: ``build`` (download + full rebuild), ``refresh``
-(conditional rebuild — the cron job), and ``status`` (print provenance of the
-existing DB).
+(conditional rebuild — the cron job), ``fetch`` (download the prebuilt DB from
+the GitHub Release), and ``status`` (print provenance of the existing DB).
 """
 
 from __future__ import annotations
@@ -194,6 +194,27 @@ def refresh() -> None:
         _print_meta(meta, header="Orphanet database refreshed:")
     else:
         print(f"Orphanet database refreshed at {db_path}.")
+
+
+@app.command()
+def fetch() -> None:
+    """Download the prebuilt database from the GitHub Release (no local build)."""
+    from orphanet_link.exceptions import DataUnavailableError
+    from orphanet_link.services.data_resolver import fetch_prebuilt
+
+    config = get_config()
+    try:
+        db_path = fetch_prebuilt(config)
+    except DataUnavailableError as exc:
+        print(f"ERROR: could not fetch prebuilt database: {exc}")
+        print("Run `orphanet-link-data build` to build it locally instead.")
+        raise typer.Exit(code=1) from exc
+
+    meta = _read_meta(db_path)
+    if meta is not None:
+        _print_meta(meta, header="Fetched prebuilt Orphanet database:")
+    else:
+        print(f"Fetched prebuilt Orphanet database at {db_path}.")
 
 
 @app.command()

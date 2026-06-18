@@ -1,0 +1,26 @@
+# genefoundry-router integration — orphanet-link
+#
+# This is the prepared (not yet pushed) entry to add to the genefoundry-router
+# registry. Add it to genefoundry-router/servers.yaml under the `servers:` key.
+#
+# Also add the following line to the router's .env file:
+#   GF_ORPHANET_URL=https://orphanet-link.genefoundry.org/mcp
+#
+# Note: GF_ORPHANET_URL is set on the ROUTER side, not in orphanet-link's .env.
+#
+# Fleet compliance:
+# - All 19 tools use unprefixed verb_noun names (resolve_disease, get_disease,
+#   find_diseases_by_gene, …) matching the fleet Tool-Naming-Standard-v1 regex
+#   ^[a-z0-9_]{1,50}$ with canonical verbs. The router namespaces them to
+#   orphanet__<tool> when exposing them to clients.
+# - All tools follow Response-Envelope-Standard-v1 (success/_meta envelope,
+#   7-code error taxonomy, next_commands workflow steering).
+# - Self-healing hints (next_commands[].tool, fallback_tool) use bare leaf names;
+#   the router adds the namespace prefix when dispatching.
+# - Compliance was verified locally against the router's `doctor --strict-naming`
+#   rules before this entry was prepared.
+
+servers:
+  - { name: orphanet, repo: berntpopp/orphanet-link, url_env: GF_ORPHANET_URL,
+      namespace: orphanet, tags: [disease, ontology, rare-disease, epidemiology, gene, phenotype],
+      entrypoints: [resolve_disease] }
