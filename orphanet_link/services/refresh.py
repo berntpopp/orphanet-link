@@ -51,9 +51,7 @@ async def _refresh_loop(config: OrphanetDataConfig, logger: Any) -> None:
             logger.warning("orphanet_data_refresh_failed", error=str(exc))
 
 
-def start_refresh_scheduler(
-    config: OrphanetDataConfig, logger: Any
-) -> asyncio.Task[None] | None:
+def start_refresh_scheduler(config: OrphanetDataConfig, logger: Any) -> asyncio.Task[None] | None:
     """Start the optional refresh loop task; return the task or ``None`` if disabled.
 
     Args:

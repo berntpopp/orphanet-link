@@ -83,9 +83,7 @@ def parse(path: str | Path) -> Product6Result:
         if not code:
             continue
 
-        for assoc_el in disorder.findall(
-            "DisorderGeneAssociationList/DisorderGeneAssociation"
-        ):
+        for assoc_el in disorder.findall("DisorderGeneAssociationList/DisorderGeneAssociation"):
             gene_el = assoc_el.find("Gene")
             if gene_el is None:
                 continue
@@ -104,9 +102,7 @@ def parse(path: str | Path) -> Product6Result:
                     "orpha_code": code,
                     "gene_symbol": symbol,
                     "association_type": c.named(assoc_el, "DisorderGeneAssociationType"),
-                    "association_status": c.named(
-                        assoc_el, "DisorderGeneAssociationStatus"
-                    ),
+                    "association_status": c.named(assoc_el, "DisorderGeneAssociationStatus"),
                     "source_pmids": c.text(assoc_el, "SourceOfValidation"),
                 }
             )

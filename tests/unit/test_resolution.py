@@ -122,5 +122,8 @@ def test_resolve_ambiguous_raises(repo):
         {"orpha_code": "58", "name": "Alexander disease", "label_type": "name"},
         {"orpha_code": "166024", "name": "Acrocallosal syndrome", "label_type": "name"},
     ]
-    with mock.patch.object(repo, "resolve_label", return_value=two_hits), pytest.raises(AmbiguousQueryError):
+    with (
+        mock.patch.object(repo, "resolve_label", return_value=two_hits),
+        pytest.raises(AmbiguousQueryError),
+    ):
         resolve(repo, "some ambiguous label")

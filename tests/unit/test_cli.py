@@ -126,6 +126,7 @@ def test_build_calls_download_and_build(
     monkeypatch.setattr(cli, "download_files", fake_download)
     # Patch build_database inside cli's imported namespace.
     import orphanet_link.ingest.builder as builder_mod
+
     monkeypatch.setattr(builder_mod, "build_database", fake_build)
 
     result = runner.invoke(cli.app, ["build"])
@@ -270,9 +271,7 @@ def test_refresh_exits_1_on_download_error(
 # ---------------------------------------------------------------------------
 
 
-def test_status_prints_meta_when_db_exists(
-    cfg: OrphanetDataConfig, tmp_path: Path
-) -> None:
+def test_status_prints_meta_when_db_exists(cfg: OrphanetDataConfig, tmp_path: Path) -> None:
     _make_minimal_db(cfg.db_path)
     result = runner.invoke(cli.app, ["status"])
     assert result.exit_code == 0, result.output

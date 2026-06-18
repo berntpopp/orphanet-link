@@ -175,16 +175,17 @@ def download_file(
             content_length = _int_or_none(response.headers.get("Content-Length"))
             _stream_to_file(response, dest)
     except httpx.HTTPStatusError as exc:
-        raise DownloadError(
-            f"GET {url} failed: {exc.response.status_code}"
-        ) from exc
+        raise DownloadError(f"GET {url} failed: {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
         raise DownloadError(f"GET {url} failed: {exc}") from exc
 
     _write_cache(config, url, etag=etag, last_modified=last_modified)
     logger.info(
         "downloaded key=%s filename=%s bytes=%s etag=%s",
-        key, filename, content_length, etag,
+        key,
+        filename,
+        content_length,
+        etag,
     )
     return DownloadResult(
         key=key,
@@ -227,9 +228,7 @@ def download_files(
             if key not in optional_keys:
                 raise
             dest = config.data_dir / filename
-            logger.warning(
-                "optional_file_unavailable key=%s filename=%s", key, filename
-            )
+            logger.warning("optional_file_unavailable key=%s filename=%s", key, filename)
             bulk.results[key] = DownloadResult(
                 key=key,
                 path=dest if dest.exists() else None,

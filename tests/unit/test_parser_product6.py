@@ -46,8 +46,7 @@ def test_product6_association_row():
     """Association for orpha_code 166024 / KIF7 matches expected fields."""
     res = product6.parse(FX)
     assoc = next(
-        a for a in res.associations
-        if a["orpha_code"] == "166024" and a["gene_symbol"] == "KIF7"
+        a for a in res.associations if a["orpha_code"] == "166024" and a["gene_symbol"] == "KIF7"
     )
     assert assoc["source_pmids"] == "22587682[PMID]"
     assert assoc["association_status"] == "Assessed"

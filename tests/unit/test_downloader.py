@@ -107,19 +107,11 @@ def test_download_file_force_skips_cache(config: OrphanetDataConfig) -> None:
     url = _url(config, filename)
 
     # Seed the cache.
-    respx.get(url).mock(
-        return_value=httpx.Response(
-            200, text="v1", headers={"ETag": '"v1"'}
-        )
-    )
+    respx.get(url).mock(return_value=httpx.Response(200, text="v1", headers={"ETag": '"v1"'}))
     download_file(config, "product1", filename)
 
     # With force=True no conditional headers are sent; server returns 200 again.
-    respx.get(url).mock(
-        return_value=httpx.Response(
-            200, text="v2", headers={"ETag": '"v2"'}
-        )
-    )
+    respx.get(url).mock(return_value=httpx.Response(200, text="v2", headers={"ETag": '"v2"'}))
     res = download_file(config, "product1", filename, force=True)
     assert res.not_modified is False
     assert res.etag == '"v2"'
@@ -187,9 +179,7 @@ def test_download_files_optional_404_degrades(config: OrphanetDataConfig) -> Non
     respx.get(_url(config, "en_product1.xml")).mock(
         return_value=httpx.Response(200, text="<JDBOR/>", headers={"ETag": '"a"'})
     )
-    respx.get(_url(config, "en_product3_156.xml")).mock(
-        return_value=httpx.Response(404)
-    )
+    respx.get(_url(config, "en_product3_156.xml")).mock(return_value=httpx.Response(404))
 
     # product1 is required; product3_156 is optional — must NOT raise.
     bulk = download_files(config, files, optional={"product3_156"})
@@ -208,9 +198,7 @@ def test_download_files_optional_500_degrades(config: OrphanetDataConfig) -> Non
     respx.get(_url(config, "en_product1.xml")).mock(
         return_value=httpx.Response(200, text="<JDBOR/>", headers={"ETag": '"a"'})
     )
-    respx.get(_url(config, "en_funct_consequences.xml")).mock(
-        return_value=httpx.Response(503)
-    )
+    respx.get(_url(config, "en_funct_consequences.xml")).mock(return_value=httpx.Response(503))
 
     bulk = download_files(config, files, optional={"funct"})
     assert bulk.path("product1") is not None
@@ -252,7 +240,9 @@ def test_cache_written_and_read(config: OrphanetDataConfig, tmp_path: Path) -> N
 
     respx.get(url).mock(
         return_value=httpx.Response(
-            200, text="x", headers={"ETag": '"cached"', "Last-Modified": "Thu, 01 Jan 2026 00:00:00 GMT"}
+            200,
+            text="x",
+            headers={"ETag": '"cached"', "Last-Modified": "Thu, 01 Jan 2026 00:00:00 GMT"},
         )
     )
     download_file(config, "product1", filename)

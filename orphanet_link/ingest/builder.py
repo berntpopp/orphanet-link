@@ -129,9 +129,7 @@ def _load_product1(conn: sqlite3.Connection, path: Path) -> tuple[int, int]:
     _executemany(conn, "INSERT INTO disorder_synonym VALUES (?,?)", synonyms)
     _executemany(conn, "INSERT INTO disorder_lookup VALUES (?,?,?)", lookups)
     _executemany(conn, "INSERT INTO disorder_fts VALUES (?,?,?)", fts)
-    _executemany(
-        conn, "INSERT INTO xref VALUES (?,?,?,?,?,?,?,?)", xrefs
-    )
+    _executemany(conn, "INSERT INTO xref VALUES (?,?,?,?,?,?,?,?)", xrefs)
     return len(disorders), len(xrefs)
 
 
@@ -165,9 +163,7 @@ def _load_product6(conn: sqlite3.Connection, path: Path) -> int:
         for a in result.associations
         if a["gene_symbol"]
     ]
-    _executemany(
-        conn, "INSERT OR IGNORE INTO gene VALUES (?,?,?,?,?,?,?,?,?,?,?)", genes
-    )
+    _executemany(conn, "INSERT OR IGNORE INTO gene VALUES (?,?,?,?,?,?,?,?,?,?,?)", genes)
     _executemany(conn, "INSERT INTO disorder_gene VALUES (?,?,?,?,?)", assoc)
     return len(genes)
 
@@ -210,12 +206,20 @@ def build_database(
                 conn.executescript(load_schema_sql())
 
                 disorder_count, xref_count = _load_product1(conn, Path(paths["product1"]))
-                gene_count = _load_product6(conn, Path(paths["product6"])) if "product6" in paths else 0
+                gene_count = (
+                    _load_product6(conn, Path(paths["product6"])) if "product6" in paths else 0
+                )
 
                 phenotype_count = 0
                 if "product4" in paths:
                     rows = [
-                        (r["orpha_code"], r["hpo_id"], r["hpo_term"], r["frequency"], r["diagnostic_criteria"])
+                        (
+                            r["orpha_code"],
+                            r["hpo_id"],
+                            r["hpo_term"],
+                            r["frequency"],
+                            r["diagnostic_criteria"],
+                        )
                         for r in product4.parse(Path(paths["product4"]))
                         if r["hpo_id"]
                     ]
@@ -233,9 +237,14 @@ def build_database(
                 if "product9_prev" in paths:
                     prev = [
                         (
-                            r["orpha_code"], r["prevalence_type"], r["prevalence_class"],
-                            r["val_moy"], r["geographic"], r["qualification"],
-                            r["validation_status"], r["source"],
+                            r["orpha_code"],
+                            r["prevalence_type"],
+                            r["prevalence_class"],
+                            r["val_moy"],
+                            r["geographic"],
+                            r["qualification"],
+                            r["validation_status"],
+                            r["source"],
                         )
                         for r in product9_prev.parse(Path(paths["product9_prev"]))
                     ]
@@ -245,11 +254,19 @@ def build_database(
                 if "product9_ages" in paths:
                     ages = product9_ages.parse(Path(paths["product9_ages"]))
                     _executemany(conn, "INSERT INTO age_of_onset VALUES (?,?)", list(ages.onsets))
-                    _executemany(conn, "INSERT INTO inheritance VALUES (?,?)", list(ages.inheritance))
+                    _executemany(
+                        conn, "INSERT INTO inheritance VALUES (?,?)", list(ages.inheritance)
+                    )
 
                 if "funct" in paths:
                     disab = [
-                        (r["orpha_code"], r["annotation"], r["frequency"], r["temporality"], r["severity"])
+                        (
+                            r["orpha_code"],
+                            r["annotation"],
+                            r["frequency"],
+                            r["temporality"],
+                            r["severity"],
+                        )
                         for r in funct_consequences.parse(Path(paths["funct"]))
                     ]
                     _executemany(conn, "INSERT INTO disability VALUES (?,?,?,?,?)", disab)
@@ -258,7 +275,9 @@ def build_database(
                 specialties: list[tuple[str, str]] = []
                 for sid, cpath in (classification_paths or {}).items():
                     res = product3.parse(Path(cpath), sid)
-                    edges.extend((e["orpha_code"], e["parent_code"], e["specialty_id"]) for e in res.edges)
+                    edges.extend(
+                        (e["orpha_code"], e["parent_code"], e["specialty_id"]) for e in res.edges
+                    )
                     if res.specialty:
                         specialties.append((res.specialty["specialty_id"], res.specialty["name"]))
                 _executemany(conn, "INSERT INTO classification_edge VALUES (?,?,?)", edges)

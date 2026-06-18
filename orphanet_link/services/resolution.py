@@ -72,7 +72,8 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
             }
         if len(hits) > 1:
             candidates = [
-                {"orpha_code": h["orpha_code"], "name": h["name"]} for h in hits[:_MAX_AMBIGUITY_CANDIDATES]
+                {"orpha_code": h["orpha_code"], "name": h["name"]}
+                for h in hits[:_MAX_AMBIGUITY_CANDIDATES]
             ]
             raise AmbiguousQueryError(
                 f"'{raw}' maps to {len(hits)} Orphanet disorders; pick one.",

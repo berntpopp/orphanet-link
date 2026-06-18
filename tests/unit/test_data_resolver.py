@@ -94,9 +94,7 @@ def config(tmp_path: Path) -> OrphanetDataConfig:
 
 
 @respx.mock
-def test_fetch_prebuilt_downloads_and_verifies(
-    config: OrphanetDataConfig, tmp_path: Path
-) -> None:
+def test_fetch_prebuilt_downloads_and_verifies(config: OrphanetDataConfig, tmp_path: Path) -> None:
     """fetch_prebuilt places the DB, verifies SHA-256, and checks schema."""
     tiny_db = _make_tiny_db(tmp_path)
     gz_bytes, sha_hex = _gz_and_sha(tiny_db)
@@ -105,9 +103,7 @@ def test_fetch_prebuilt_downloads_and_verifies(
         return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
     )
     respx.get(_GZ_URL).mock(return_value=httpx.Response(200, content=gz_bytes))
-    respx.get(_SHA_URL).mock(
-        return_value=httpx.Response(200, content=sha_hex.encode())
-    )
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(200, content=sha_hex.encode()))
 
     result = fetch_prebuilt(config)
 
@@ -128,9 +124,7 @@ def test_fetch_prebuilt_downloads_and_verifies(
 
 
 @respx.mock
-def test_fetch_prebuilt_sha256_mismatch_raises(
-    config: OrphanetDataConfig, tmp_path: Path
-) -> None:
+def test_fetch_prebuilt_sha256_mismatch_raises(config: OrphanetDataConfig, tmp_path: Path) -> None:
     """fetch_prebuilt raises DataUnavailableError on SHA-256 mismatch."""
     tiny_db = _make_tiny_db(tmp_path)
     gz_bytes, _correct_sha = _gz_and_sha(tiny_db)
@@ -140,9 +134,7 @@ def test_fetch_prebuilt_sha256_mismatch_raises(
         return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
     )
     respx.get(_GZ_URL).mock(return_value=httpx.Response(200, content=gz_bytes))
-    respx.get(_SHA_URL).mock(
-        return_value=httpx.Response(200, content=wrong_sha.encode())
-    )
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(200, content=wrong_sha.encode()))
 
     with pytest.raises(DataUnavailableError, match="SHA-256 mismatch"):
         fetch_prebuilt(config)
@@ -166,9 +158,7 @@ def test_fetch_prebuilt_schema_version_mismatch_raises(
         return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
     )
     respx.get(_GZ_URL).mock(return_value=httpx.Response(200, content=gz_bytes))
-    respx.get(_SHA_URL).mock(
-        return_value=httpx.Response(200, content=sha_hex.encode())
-    )
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(200, content=sha_hex.encode()))
 
     with pytest.raises(DataUnavailableError, match="Schema version mismatch"):
         fetch_prebuilt(config)
@@ -251,9 +241,7 @@ def test_ensure_database_prebuilt_404_falls_back_to_local_build(
         cfg.db_path.write_bytes(dummy_db.read_bytes())
         return cfg.db_path
 
-    monkeypatch.setattr(
-        "orphanet_link.services.data_resolver.local_build", _fake_local_build
-    )
+    monkeypatch.setattr("orphanet_link.services.data_resolver.local_build", _fake_local_build)
 
     result = ensure_database(config)
 
@@ -284,12 +272,8 @@ def test_ensure_database_no_prefer_prebuilt_calls_local_build(
         calls.append("fetch_prebuilt")
         return cfg.db_path
 
-    monkeypatch.setattr(
-        "orphanet_link.services.data_resolver.local_build", _fake_local_build
-    )
-    monkeypatch.setattr(
-        "orphanet_link.services.data_resolver.fetch_prebuilt", _fake_fetch_prebuilt
-    )
+    monkeypatch.setattr("orphanet_link.services.data_resolver.local_build", _fake_local_build)
+    monkeypatch.setattr("orphanet_link.services.data_resolver.fetch_prebuilt", _fake_fetch_prebuilt)
 
     ensure_database(config)
 

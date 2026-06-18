@@ -43,9 +43,7 @@ def test_build_populates_core_tables(tmp_path):
     assert d["disorder_type"] == "Disease"
     assert d["definition"].startswith("A rare primary bone dysplasia")
 
-    omim = conn.execute(
-        "SELECT * FROM xref WHERE orpha_code='166024' AND source='OMIM'"
-    ).fetchone()
+    omim = conn.execute("SELECT * FROM xref WHERE orpha_code='166024' AND source='OMIM'").fetchone()
     assert omim["object_id"] == "607131" and omim["mapping_relation"] == "E"
 
     gene = conn.execute("SELECT * FROM gene WHERE gene_symbol='KIF7'").fetchone()
@@ -84,9 +82,12 @@ def test_build_classification_closure(tmp_path):
     ).fetchone()
     assert edge is not None
     # transitive ancestor + self-pair
-    anc = {r[0] for r in conn.execute(
-        "SELECT ancestor_code FROM classification_closure WHERE orpha_code='166024'"
-    )}
+    anc = {
+        r[0]
+        for r in conn.execute(
+            "SELECT ancestor_code FROM classification_closure WHERE orpha_code='166024'"
+        )
+    }
     assert {"166024", "93419", "156"} <= anc
 
 

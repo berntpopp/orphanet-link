@@ -21,9 +21,7 @@ _FTS_TOKEN_RE = re.compile(r"[^\s\"]+")
 #: Stable ``CASE`` expression ranking mapping relations (lower = stronger).
 _MAPPING_CASE = (
     "CASE mapping_relation "
-    + " ".join(
-        f"WHEN '{rel}' THEN {rank}" for rel, rank in MAPPING_RELATION_RANK.items()
-    )
+    + " ".join(f"WHEN '{rel}' THEN {rank}" for rel, rank in MAPPING_RELATION_RANK.items())
     + " ELSE 99 END"
 )
 
@@ -89,9 +87,7 @@ class OrphanetRepository:
 
     def get_disorder(self, code: str) -> dict[str, Any] | None:
         """Return the disorder row + ``synonyms`` list for ``code``, or ``None``."""
-        row = self._conn.execute(
-            "SELECT * FROM disorder WHERE orpha_code = ?", (code,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM disorder WHERE orpha_code = ?", (code,)).fetchone()
         if row is None:
             return None
         record: dict[str, Any] = dict(row)
@@ -143,7 +139,9 @@ class OrphanetRepository:
             rows = self._conn.execute(sql, (match, limit, offset)).fetchall()
             total = int(self._conn.execute(count_sql, (match,)).fetchone()["n"])
         except sqlite3.Error:
-            return self._search_like(query, limit=limit, offset=offset, include_obsolete=include_obsolete)
+            return self._search_like(
+                query, limit=limit, offset=offset, include_obsolete=include_obsolete
+            )
         results = [
             {
                 "orpha_code": r["orpha_code"],

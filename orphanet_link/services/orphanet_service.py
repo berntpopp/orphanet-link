@@ -105,7 +105,9 @@ class OrphanetService:
         """Resolve any id/label/xref to a canonical Orphanet term with provenance."""
         raw = (query or "").strip()
         if not raw:
-            raise InvalidInputError("query must be a non-empty ORPHAcode, label, or xref.", field="query")
+            raise InvalidInputError(
+                "query must be a non-empty ORPHAcode, label, or xref.", field="query"
+            )
         resolved = resolve(self.repo, raw)
         return {
             "query": raw,
@@ -129,7 +131,9 @@ class OrphanetService:
             raise InvalidInputError("query must be a non-empty search string.", field="query")
         limit = max(1, min(limit, 200))
         offset = max(0, offset)
-        result = self.repo.search(raw, limit=limit, offset=offset, include_obsolete=include_obsolete)
+        result = self.repo.search(
+            raw, limit=limit, offset=offset, include_obsolete=include_obsolete
+        )
         hits = result.get("results", [])
         total = result.get("total", len(hits))
         results = [shape_search_hit(hit, response_mode) for hit in hits]
@@ -176,13 +180,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         genes = self.repo.get_genes(code)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "genes": genes,
-            "count": len(genes),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "genes": genes,
+                "count": len(genes),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_phenotypes(
         self, term: str, frequency: str | None = None, response_mode: str = DEFAULT_RESPONSE_MODE
@@ -191,14 +198,17 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         phenotypes = self.repo.get_phenotypes(code, frequency)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "phenotypes": phenotypes,
-            "count": len(phenotypes),
-            "frequency_filter": frequency,
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "phenotypes": phenotypes,
+                "count": len(phenotypes),
+                "frequency_filter": frequency,
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_prevalence(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE
@@ -207,13 +217,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         prevalence = self.repo.get_prevalence(code)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "prevalence": prevalence,
-            "count": len(prevalence),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "prevalence": prevalence,
+                "count": len(prevalence),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_natural_history(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE
@@ -222,13 +235,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         nat = self.repo.get_natural_history(code)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "age_of_onset": nat.get("age_of_onset", []),
-            "inheritance": nat.get("inheritance", []),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "age_of_onset": nat.get("age_of_onset", []),
+                "inheritance": nat.get("inheritance", []),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_disability(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE
@@ -237,13 +253,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         disability = self.repo.get_disability(code)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "disability": disability,
-            "count": len(disability),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "disability": disability,
+                "count": len(disability),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_classification(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE
@@ -252,13 +271,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         cls = self.repo.get_classification(code)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "parents": cls.get("parents", []),
-            "children": cls.get("children", []),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "parents": cls.get("parents", []),
+                "children": cls.get("children", []),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_ancestors(
         self,
@@ -274,13 +296,16 @@ class OrphanetService:
         result = self.repo.get_ancestors(code, limit=limit, offset=offset)
         rows = result.get("results", [])
         total = result.get("total", len(rows))
-        return shape({
-            "orpha_code": code,
-            "name": name,
-            "ancestors": rows,
-            **page_fields(total=total, returned=len(rows), limit=limit, offset=offset),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": name,
+                "ancestors": rows,
+                **page_fields(total=total, returned=len(rows), limit=limit, offset=offset),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def get_disease_descendants(
         self,
@@ -296,13 +321,16 @@ class OrphanetService:
         result = self.repo.get_descendants(code, limit=limit, offset=offset)
         rows = result.get("results", [])
         total = result.get("total", len(rows))
-        return shape({
-            "orpha_code": code,
-            "name": name,
-            "descendants": rows,
-            **page_fields(total=total, returned=len(rows), limit=limit, offset=offset),
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": name,
+                "descendants": rows,
+                **page_fields(total=total, returned=len(rows), limit=limit, offset=offset),
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def map_cross_ontology(
         self,
@@ -314,14 +342,17 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         grouped = group_xrefs(self.repo.get_xrefs(code), prefixes)
-        return shape({
-            "orpha_code": code,
-            "name": resolved["name"],
-            "mappings": grouped,
-            "count": sum(len(v) for v in grouped.values()),
-            "prefixes_filter": prefixes,
-            "orphanet_version": self._orphanet_version(),
-        }, response_mode)
+        return shape(
+            {
+                "orpha_code": code,
+                "name": resolved["name"],
+                "mappings": grouped,
+                "count": sum(len(v) for v in grouped.values()),
+                "prefixes_filter": prefixes,
+                "orphanet_version": self._orphanet_version(),
+            },
+            response_mode,
+        )
 
     def resolve_xref(
         self,
@@ -333,7 +364,9 @@ class OrphanetService:
         """Reverse lookup: external CURIE -> Orphanet disorders that cross-reference it."""
         raw = (xref_id or "").strip()
         if not raw:
-            raise InvalidInputError("xref_id must be a non-empty CURIE like OMIM:607131.", field="xref_id")
+            raise InvalidInputError(
+                "xref_id must be a non-empty CURIE like OMIM:607131.", field="xref_id"
+            )
         prefix, local = parse_curie(raw)
         if prefix is None:
             raise InvalidInputError(
@@ -365,7 +398,9 @@ class OrphanetService:
         """Find disorders associated with a gene symbol."""
         raw = (gene_symbol or "").strip()
         if not raw:
-            raise InvalidInputError("gene_symbol must be a non-empty HGNC gene symbol.", field="gene_symbol")
+            raise InvalidInputError(
+                "gene_symbol must be a non-empty HGNC gene symbol.", field="gene_symbol"
+            )
         limit = max(1, min(limit, _MAX_LIMIT))
         offset = max(0, offset)
         result = self.repo.find_disorders_by_gene(raw, limit=limit, offset=offset)
@@ -388,7 +423,9 @@ class OrphanetService:
         """Find disorders annotated with an HPO term."""
         raw = (hpo_id or "").strip()
         if not raw:
-            raise InvalidInputError("hpo_id must be a non-empty HPO term id like HP:0000256.", field="hpo_id")
+            raise InvalidInputError(
+                "hpo_id must be a non-empty HPO term id like HP:0000256.", field="hpo_id"
+            )
         limit = max(1, min(limit, _MAX_LIMIT))
         offset = max(0, offset)
         result = self.repo.find_disorders_by_phenotype(raw, limit=limit, offset=offset)
@@ -414,7 +451,11 @@ class OrphanetService:
                 results.append({"success": True, **item})
             except Exception as exc:
                 results.append({"success": False, "query": query, "error": str(exc)})
-        return {"results": results, "total": len(results), "orphanet_version": self._orphanet_version()}
+        return {
+            "results": results,
+            "total": len(results),
+            "orphanet_version": self._orphanet_version(),
+        }
 
     def get_disease_batch(
         self,
@@ -430,4 +471,8 @@ class OrphanetService:
                 results.append({"success": True, **item})
             except Exception as exc:
                 results.append({"success": False, "term": term, "error": str(exc)})
-        return {"results": results, "total": len(results), "orphanet_version": self._orphanet_version()}
+        return {
+            "results": results,
+            "total": len(results),
+            "orphanet_version": self._orphanet_version(),
+        }

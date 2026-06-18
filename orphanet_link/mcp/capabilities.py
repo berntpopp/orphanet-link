@@ -316,5 +316,6 @@ def register_capability_resources(mcp: FastMCP) -> None:
     @mcp.resource("orphanet://citation", mime_type="text/plain")
     def orphanet_citation() -> str:
         from orphanet_link.constants import citation as _citation
+
         version = _orphanet_version()
         return _citation(version)

@@ -13,23 +13,25 @@ from orphanet_link.mcp.capabilities import TOOLS
 from orphanet_link.mcp.facade import create_orphanet_mcp
 
 _NAME_RE = re.compile(r"^[a-z0-9_]{1,50}$")
-_CANONICAL_VERBS = frozenset({
-    "get",
-    "search",
-    "list",
-    "resolve",
-    "find",
-    "compare",
-    "compute",
-    "predict",
-    "analyze",
-    "annotate",
-    "submit",
-    "export",
-    "generate",
-    "download",
-    "map",
-})
+_CANONICAL_VERBS = frozenset(
+    {
+        "get",
+        "search",
+        "list",
+        "resolve",
+        "find",
+        "compare",
+        "compute",
+        "predict",
+        "analyze",
+        "annotate",
+        "submit",
+        "export",
+        "generate",
+        "download",
+        "map",
+    }
+)
 _NAMESPACE = "orphanet"
 
 
@@ -50,9 +52,7 @@ async def test_tool_names_conform_to_standard() -> None:
     names = sorted(t.name for t in await mcp.list_tools())
     assert names, "no tools registered"
     for name in names:
-        assert _NAME_RE.match(name), (
-            f"{name!r} must match ^[a-z0-9_]{{1,50}}$"
-        )
+        assert _NAME_RE.match(name), f"{name!r} must match ^[a-z0-9_]{{1,50}}$"
         leading_verb = name.split("_", 1)[0]
         assert leading_verb in _CANONICAL_VERBS, (
             f"{name!r} must start with a canonical verb from {sorted(_CANONICAL_VERBS)}"

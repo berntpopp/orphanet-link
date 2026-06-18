@@ -118,7 +118,7 @@ def _split_paths(
     classification: dict[str, Path] = {}
     for key, path in bulk.paths.items():
         if key.startswith("product3_"):
-            sid = key[len("product3_"):]
+            sid = key[len("product3_") :]
             classification[sid] = path
         else:
             single[key] = path
@@ -176,10 +176,7 @@ def refresh() -> None:
     if bulk.not_modified and config.db_path.exists():
         meta = _read_meta(config.db_path)
         version = meta.orphanet_version if meta else "unknown"
-        print(
-            f"Orphanet database is up to date "
-            f"(releases not modified; version {version})."
-        )
+        print(f"Orphanet database is up to date (releases not modified; version {version}).")
         return
 
     single_paths, classification_paths = _split_paths(bulk)

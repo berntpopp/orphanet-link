@@ -52,9 +52,7 @@ def _find_asset(assets: list[dict], name: str) -> str:
             url = asset.get("browser_download_url", "")
             if url:
                 return url
-    raise DataUnavailableError(
-        f"Release asset '{name}' not found in GitHub Release."
-    )
+    raise DataUnavailableError(f"Release asset '{name}' not found in GitHub Release.")
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -72,9 +70,7 @@ def _download_bytes(url: str, config: OrphanetDataConfig) -> bytes:
             resp.raise_for_status()
             return resp.content
     except httpx.HTTPStatusError as exc:
-        raise DataUnavailableError(
-            f"HTTP {exc.response.status_code} fetching {url}"
-        ) from exc
+        raise DataUnavailableError(f"HTTP {exc.response.status_code} fetching {url}") from exc
     except httpx.HTTPError as exc:
         raise DataUnavailableError(f"Network error fetching {url}: {exc}") from exc
 
@@ -83,14 +79,10 @@ def _check_schema(db_path: Path) -> None:
     """Raise DataUnavailableError if meta.schema_version != SCHEMA_VERSION."""
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        row = conn.execute(
-            "SELECT schema_version FROM meta WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT schema_version FROM meta WHERE id=1").fetchone()
         conn.close()
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
-        raise DataUnavailableError(
-            f"Cannot read meta table from {db_path}: {exc}"
-        ) from exc
+        raise DataUnavailableError(f"Cannot read meta table from {db_path}: {exc}") from exc
     if row is None:
         raise DataUnavailableError("meta table is empty; cannot verify schema version.")
     version = row[0]
@@ -103,6 +95,7 @@ def _check_schema(db_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
     """Download the prebuilt DB from a GitHub Release and place it at config.db_path.
@@ -140,9 +133,7 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
             f"GitHub Releases API returned HTTP {exc.response.status_code}: {release_url}"
         ) from exc
     except httpx.HTTPError as exc:
-        raise DataUnavailableError(
-            f"Network error fetching release metadata: {exc}"
-        ) from exc
+        raise DataUnavailableError(f"Network error fetching release metadata: {exc}") from exc
 
     assets: list[dict] = release.get("assets", [])
     gz_url = _find_asset(assets, _ASSET_GZ)
@@ -158,9 +149,7 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
     expected_hex = sha_bytes.decode("utf-8").split()[0].strip()
     actual_hex = _sha256_hex(gz_bytes)
     if actual_hex != expected_hex:
-        raise DataUnavailableError(
-            f"SHA-256 mismatch: expected {expected_hex}, got {actual_hex}."
-        )
+        raise DataUnavailableError(f"SHA-256 mismatch: expected {expected_hex}, got {actual_hex}.")
 
     config.data_dir.mkdir(parents=True, exist_ok=True)
     db_path = config.db_path
@@ -226,7 +215,7 @@ def local_build(config: OrphanetDataConfig) -> Path:
     classification_paths: dict[str, Path] = {}
     for key, path in bulk.paths.items():
         if key.startswith("product3_"):
-            sid = key[len("product3_"):]
+            sid = key[len("product3_") :]
             classification_paths[sid] = path
         else:
             paths[key] = path

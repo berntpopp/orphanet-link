@@ -227,9 +227,7 @@ def register_association_tools(mcp: FastMCP) -> None:
             payload = get_orphanet_service().find_diseases_by_gene(
                 gene_symbol, limit=limit, offset=offset, response_mode=response_mode
             )
-            payload.setdefault("_meta", {})["next_commands"] = after_find_by(
-                payload, "gene_symbol"
-            )
+            payload.setdefault("_meta", {})["next_commands"] = after_find_by(payload, "gene_symbol")
             return payload
 
         return await run_mcp_tool(
