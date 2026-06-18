@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JDBOR date="2025-12-09 07:09:56" version="1.3.42 / 4.1.8 [2025-03-03]" copyright="Orphanet (c) 2025">
+  <Availability>
+    <Licence>
+      <ShortIdentifier>CC-BY-4.0</ShortIdentifier>
+    </Licence>
+  </Availability>
+  <HPODisorderSetStatusList count="1">
+    <HPODisorderSetStatus id="1">
+      <Disorder id="2">
+        <OrphaCode>58</OrphaCode>
+        <ExpertLink lang="en">http://www.orpha.net/consor/cgi-bin/OC_Exp.php?lng=en&amp;Expert=58</ExpertLink>
+        <Name lang="en">Alexander disease</Name>
+        <DisorderType id="21394"><Name lang="en">Disease</Name></DisorderType>
+        <DisorderGroup id="36547"><Name lang="en">Disorder</Name></DisorderGroup>
+        <HPODisorderAssociationList count="2">
+          <HPODisorderAssociation id="554366">
+            <HPO id="4"><HPOId>HP:0000256</HPOId><HPOTerm>Macrocephaly</HPOTerm></HPO>
+            <HPOFrequency id="28412"><Name lang="en">Very frequent (99-80%)</Name></HPOFrequency>
+            <DiagnosticCriteria/>
+          </HPODisorderAssociation>
+          <HPODisorderAssociation id="554367">
+            <HPO id="18"><HPOId>HP:0001249</HPOId><HPOTerm>Intellectual disability</HPOTerm></HPO>
+            <HPOFrequency id="28412"><Name lang="en">Very frequent (99-80%)</Name></HPOFrequency>
+            <DiagnosticCriteria/>
+          </HPODisorderAssociation>
+        </HPODisorderAssociationList>
+      </Disorder>
+    </HPODisorderSetStatus>
+  </HPODisorderSetStatusList>
+</JDBOR>
