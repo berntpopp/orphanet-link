@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JDBOR date="2025-12-09 07:06:32" version="1.3.42 / 4.1.8 [2025-03-03]" copyright="Orphanet (c) 2025" dbserver="test">
+  <Availability>
+    <Licence>
+      <FullName lang="en">Creative Commons Attribution 4.0 International</FullName>
+      <ShortIdentifier>CC-BY-4.0</ShortIdentifier>
+      <LegalCode>https://creativecommons.org/licenses/by/4.0/legalcode</LegalCode>
+    </Licence>
+  </Availability>
+  <DisorderList count="2">
+    <Disorder id="17601">
+      <OrphaCode>166024</OrphaCode>
+      <ExpertLink lang="en">http://www.orpha.net/consor/cgi-bin/OC_Exp.php?lng=en&amp;Expert=166024</ExpertLink>
+      <Name lang="en">Multiple epiphyseal dysplasia-macrocephaly-facial dysmorphism syndrome</Name>
+      <DisorderFlagList count="1">
+        <DisorderFlag id="475">
+          <Value>1</Value>
+          <Label></Label>
+        </DisorderFlag>
+      </DisorderFlagList>
+      <SynonymList count="1">
+        <Synonym lang="en">Multiple epiphyseal dysplasia, Al-Gazali type</Synonym>
+      </SynonymList>
+      <DisorderType id="21394">
+        <Name lang="en">Disease</Name>
+      </DisorderType>
+      <DisorderGroup id="36547">
+        <Name lang="en">Disorder</Name>
+      </DisorderGroup>
+      <ExternalReferenceList count="5">
+        <ExternalReference id="212360">
+          <Source>ICD-11</Source>
+          <Reference>LD24.61</Reference>
+          <DisorderMappingRelation id="21534">
+            <Name lang="en">NTBT (ORPHAcode is narrower than the targeted code used to represent it)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation id="21597">
+            <Name lang="en">Index term (ICD-10: Orphanet entity listed in the ICD-10 Index. ICD-11: Orphanet entity listed in the ICD-11 Foundation)</Name>
+          </DisorderMappingICDRelation>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl>https://icd.who.int/browse/latest-release/mms/en#2009123831</DisorderMappingICDRefUrl>
+          <DisorderMappingICDRefUri>1359939784</DisorderMappingICDRefUri>
+        </ExternalReference>
+        <ExternalReference id="256970">
+          <Source>MONDO</Source>
+          <Reference>0011778</Reference>
+          <DisorderMappingRelation id="21527">
+            <Name lang="en">E (Exact mapping: the two concepts are equivalent)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation/>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl/>
+          <DisorderMappingICDRefUri/>
+        </ExternalReference>
+        <ExternalReference id="120419">
+          <Source>ICD-10</Source>
+          <Reference>Q77.3</Reference>
+          <DisorderMappingRelation id="21534">
+            <Name lang="en">NTBT (ORPHAcode is narrower than the targeted code used to represent it)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation id="21604">
+            <Name lang="en">Attributed code (ICD-10/ICD-11: The targeted code is assigned by Orphanet)</Name>
+          </DisorderMappingICDRelation>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl/>
+          <DisorderMappingICDRefUri/>
+        </ExternalReference>
+        <ExternalReference id="38949">
+          <Source>OMIM</Source>
+          <Reference>607131</Reference>
+          <DisorderMappingRelation id="21527">
+            <Name lang="en">E (Exact mapping: the two concepts are equivalent)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation/>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl/>
+          <DisorderMappingICDRefUri/>
+        </ExternalReference>
+        <ExternalReference id="219782">
+          <Source>UMLS</Source>
+          <Reference>C4304500</Reference>
+          <DisorderMappingRelation id="21527">
+            <Name lang="en">E (Exact mapping: the two concepts are equivalent)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation/>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl/>
+          <DisorderMappingICDRefUri/>
+        </ExternalReference>
+      </ExternalReferenceList>
+      <SummaryInformationList count="1">
+        <SummaryInformation id="63385" lang="en">
+          <TextSectionList count="1">
+            <TextSection id="83697" lang="en">
+              <TextSectionType id="16907">
+                <Name lang="en">Definition</Name>
+              </TextSectionType>
+              <Contents>A rare primary bone dysplasia characterized by the association of multiple epiphyseal dysplasia with macrocephaly and dysmorphic facial features.</Contents>
+            </TextSection>
+          </TextSectionList>
+        </SummaryInformation>
+      </SummaryInformationList>
+    </Disorder>
+    <Disorder id="2">
+      <OrphaCode>58</OrphaCode>
+      <ExpertLink lang="en">http://www.orpha.net/consor/cgi-bin/OC_Exp.php?lng=en&amp;Expert=58</ExpertLink>
+      <Name lang="en">Alexander disease</Name>
+      <SynonymList count="2">
+        <Synonym lang="en">AxD</Synonym>
+        <Synonym lang="en">Fibrinoid leukodystrophy</Synonym>
+      </SynonymList>
+      <DisorderType id="21394">
+        <Name lang="en">Disease</Name>
+      </DisorderType>
+      <DisorderGroup id="36547">
+        <Name lang="en">Disorder</Name>
+      </DisorderGroup>
+      <ExternalReferenceList count="1">
+        <ExternalReference id="1">
+          <Source>OMIM</Source>
+          <Reference>203450</Reference>
+          <DisorderMappingRelation id="21527">
+            <Name lang="en">E (Exact mapping: the two concepts are equivalent)</Name>
+          </DisorderMappingRelation>
+          <DisorderMappingICDRelation/>
+          <DisorderMappingValidationStatus id="21611">
+            <Name lang="en">Validated</Name>
+          </DisorderMappingValidationStatus>
+          <DisorderMappingICDRefUrl/>
+          <DisorderMappingICDRefUri/>
+        </ExternalReference>
+      </ExternalReferenceList>
+    </Disorder>
+  </DisorderList>
+</JDBOR>
