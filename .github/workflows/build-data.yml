@@ -1,0 +1,150 @@
+# Orphanet data artifact pipeline
+#
+# Builds data/orphanet.sqlite from live Orphadata XML files, packages it as a
+# gzipped SQLite with sha256 + manifest.json, and publishes the three assets to
+# a GitHub Release tagged "data-<orphanet_version>".
+#
+# IMPORTANT — first run:
+#   Trigger this workflow manually via the GitHub Actions "Run workflow" button
+#   (workflow_dispatch).  Subsequent runs happen automatically every Monday at
+#   06:00 UTC, or when ingest code changes are pushed.
+#
+# CONFIGURATION:
+#   The default value of ORPHANET_LINK_DATA__RELEASE_REPO in orphanet_link/config.py
+#   must match the repository that hosts these releases (e.g. "berntpopp/orphanet-link").
+
+name: Build & Publish Orphanet Data
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  push:
+    paths:
+      - "orphanet_link/ingest/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: Build SQLite and publish release assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python
+        uses: ./.github/actions/setup-uv-python
+
+      # -----------------------------------------------------------------------
+      # 1. Build the database (downloads live Orphadata XML)
+      # -----------------------------------------------------------------------
+      - name: Build Orphanet database
+        run: uv run orphanet-link-data build
+        timeout-minutes: 45
+
+      # -----------------------------------------------------------------------
+      # 2. Read version metadata from the built DB
+      # -----------------------------------------------------------------------
+      - name: Extract DB metadata
+        id: meta
+        run: |
+          VERSION=$(uv run python -c "
+          import sqlite3
+          print(sqlite3.connect('data/orphanet.sqlite').execute(
+              'select orphanet_version from meta').fetchone()[0])
+          ")
+          SLUG=$(echo "$VERSION" | tr -c '0-9A-Za-z.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
+          TAG="data-$SLUG"
+          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Orphanet version: $VERSION  ->  tag: $TAG"
+
+      # -----------------------------------------------------------------------
+      # 3. Idempotency guard — skip publish if this release tag already exists
+      # -----------------------------------------------------------------------
+      - name: Check whether release already exists
+        id: release_check
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.meta.outputs.tag }}" --json tagName -q '.tagName' 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.meta.outputs.tag }} already exists — skipping publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.meta.outputs.tag }} does not exist — will publish."
+          fi
+
+      # -----------------------------------------------------------------------
+      # 4. Package assets (only when release does not exist yet)
+      # -----------------------------------------------------------------------
+      - name: Compress database
+        if: steps.release_check.outputs.exists != 'true'
+        run: |
+          gzip -kf data/orphanet.sqlite
+          ( cd data && sha256sum orphanet.sqlite.gz > orphanet.sqlite.gz.sha256 )
+
+      - name: Write manifest.json
+        if: steps.release_check.outputs.exists != 'true'
+        run: |
+          uv run python - <<'EOF'
+          import json, sqlite3
+          from datetime import datetime, timezone
+          from orphanet_link.constants import SCHEMA_VERSION
+
+          conn = sqlite3.connect("data/orphanet.sqlite")
+          conn.row_factory = sqlite3.Row
+          row = conn.execute("SELECT * FROM meta WHERE id=1").fetchone()
+          conn.close()
+
+          manifest = {
+              "version":          row["orphanet_version"],
+              "orphanet_date":    row["orphanet_date"],
+              "schema_version":   SCHEMA_VERSION,
+              "disorder_count":   row["disorder_count"],
+              "xref_count":       row["xref_count"],
+              "gene_count":       row["gene_count"],
+              "phenotype_count":  row["phenotype_count"],
+              "prevalence_count": row["prevalence_count"],
+              "build_utc":        row["build_utc"],
+              "asset":            "orphanet.sqlite.gz",
+          }
+          with open("data/manifest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+          print(json.dumps(manifest, indent=2))
+          EOF
+
+      # -----------------------------------------------------------------------
+      # 5. Publish GitHub Release (only when release does not exist yet)
+      # -----------------------------------------------------------------------
+      - name: Publish GitHub Release
+        if: steps.release_check.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "Orphanet data ${{ steps.meta.outputs.version }}"
+          body: |
+            Prebuilt Orphanet SQLite database for [orphanet-link](https://github.com/berntpopp/orphanet-link).
+
+            **Orphanet data version:** ${{ steps.meta.outputs.version }}
+
+            **License:** Data from Orphadata is CC BY 4.0.
+            Required attribution: *Orphadata Science: Free access data from Orphanet. © INSERM 1999. Available on http://sciences.orphadata.com/*
+
+            **Assets**
+            | File | Description |
+            |------|-------------|
+            | `orphanet.sqlite.gz` | Gzip-compressed SQLite database |
+            | `orphanet.sqlite.gz.sha256` | SHA-256 checksum of the gz file |
+            | `manifest.json` | Build provenance (version, counts, schema_version) |
+          files: |
+            data/orphanet.sqlite.gz
+            data/orphanet.sqlite.gz.sha256
+            data/manifest.json
+          fail_on_unmatched_files: true

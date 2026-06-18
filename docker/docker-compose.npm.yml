@@ -1,0 +1,91 @@
+# Nginx Proxy Manager deployment overlay for orphanet-link.
+#
+# Self-contained (used standalone, not layered on docker-compose.yml): one
+# unified container serves the FastAPI REST API on / and the MCP streamable-HTTP
+# transport on /mcp via a single port (8000). NPM reverse-proxies to the fixed
+# container_name on the shared external npm_default network. Mirrors the
+# gtex-link / mgi-link / mondo-link fleet pattern. First boot fetches the
+# prebuilt Orphanet SQLite database from the GitHub Release (or builds locally
+# from Orphadata XML) into the persisted data volume.
+#
+#   docker compose -f docker/docker-compose.npm.yml --env-file .env.docker up -d --build
+name: orphanet-link-npm
+
+services:
+  orphanet_link:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: orphanet-link-npm
+    # NO published host ports - NPM handles all routing via the container name.
+    expose:
+      - "8000"
+    environment:
+      - ORPHANET_LINK_HOST=0.0.0.0
+      - ORPHANET_LINK_PORT=8000
+      - ORPHANET_LINK_TRANSPORT=unified
+      - ORPHANET_LINK_MCP_PATH=/mcp
+      - ORPHANET_LINK_LOG_LEVEL=${LOG_LEVEL_API:-INFO}
+      - ORPHANET_LINK_LOG_FORMAT=json
+      - ORPHANET_LINK_DATA__DATA_DIR=/app/data
+      # Fetch prebuilt DB from GitHub Release on first boot (persisted in the volume).
+      - ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true
+      - ORPHANET_LINK_DATA__PREFER_PREBUILT=true
+      # No in-app scheduler in the NPM deploy; Orphanet releases are bi-annual,
+      # so refresh stays manual (host: docker compose ... exec orphanet-link-npm
+      # uv run python -c "...ensure_database(...)"). The persisted DB serves until then.
+      - ORPHANET_LINK_DATA__REFRESH_ENABLED=false
+    # The image ENTRYPOINT bootstraps the DB then exec's the unified server,
+    # reading ORPHANET_LINK_TRANSPORT/HOST/PORT above; no command override needed.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # First boot downloads the prebuilt SQLite DB or builds from Orphadata XML.
+      start_period: 150s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      # TMPDIR=/tmp/orphanet-link (set in the image) - download/build scratch space.
+      - /tmp/orphanet-link:rw,noexec,nosuid,size=512m,mode=1777
+    volumes:
+      # Persist the Orphanet SQLite database across container restarts.
+      - orphanet-data:/app/data
+    networks:
+      - orphanet_link_internal_net
+      - npm_proxy_network
+    deploy:
+      resources:
+        limits:
+          memory: ${ORPHANET_API_MEMORY_LIMIT:-1g}
+          cpus: ${ORPHANET_API_CPU_LIMIT:-1.0}
+          pids: 256
+        reservations:
+          memory: 256m
+          cpus: 0.25
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=orphanet-link,environment=production,proxy=npm"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    init: true
+
+volumes:
+  orphanet-data:
+    driver: local
+
+networks:
+  orphanet_link_internal_net:
+    driver: bridge
+    name: orphanet_link_internal_net
+  npm_proxy_network:
+    external: true
+    name: ${NPM_SHARED_NETWORK_NAME:-npm_default}

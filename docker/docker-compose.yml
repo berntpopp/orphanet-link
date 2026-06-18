@@ -1,0 +1,62 @@
+name: orphanet-link
+
+services:
+  orphanet-link:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: production
+      args:
+        # Stamp build provenance into the image so get_server_capabilities/_meta
+        # can report which build answered. Defaults keep an unset env harmless.
+        ORPHANET_LINK_GIT_SHA: ${ORPHANET_LINK_GIT_SHA:-unknown}
+        ORPHANET_LINK_BUILT_AT: ${ORPHANET_LINK_BUILT_AT:-}
+    container_name: orphanet-link
+    ports:
+      - "${ORPHANET_LINK_HOST_PORT:-8000}:8000"
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.docker
+        required: false
+    environment:
+      ORPHANET_LINK_HOST: 0.0.0.0
+      ORPHANET_LINK_PORT: 8000
+      ORPHANET_LINK_TRANSPORT: unified
+      ORPHANET_LINK_MCP_PATH: /mcp
+      ORPHANET_LINK_LOG_LEVEL: INFO
+      ORPHANET_LINK_LOG_FORMAT: json
+      ORPHANET_LINK_DATA__DATA_DIR: /app/data
+      ORPHANET_LINK_DATA__AUTO_BOOTSTRAP: "true"
+      # Refresh is owned by the CI artifact pipeline + external cron.
+      # To refresh the running container, run a host cron job:
+      #   docker compose -f docker/docker-compose.yml exec orphanet-link \
+      #     uv run python -c "from orphanet_link.config import settings; \
+      #       from orphanet_link.services.data_resolver import ensure_database; \
+      #       ensure_database(settings.data)"
+      ORPHANET_LINK_DATA__REFRESH_ENABLED: "false"
+    volumes:
+      # Persist the SQLite database across container restarts.
+      - orphanet-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - orphanet-network
+
+volumes:
+  orphanet-data:
+    driver: local
+
+networks:
+  orphanet-network:
+    driver: bridge

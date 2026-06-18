@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JDBOR date="2025-12-09 07:06:32" version="1.3.42 / 4.1.8 [2025-03-03]" copyright="Orphanet (c) 2025" dbserver="test">
+  <Availability>
+    <Licence>
+      <FullName lang="en">Creative Commons Attribution 4.0 International</FullName>
+      <ShortIdentifier>CC-BY-4.0</ShortIdentifier>
+      <LegalCode>https://creativecommons.org/licenses/by/4.0/legalcode</LegalCode>
+    </Licence>
+  </Availability>
+  <DisorderList count="2">
+    <Disorder id="17601">
+      <OrphaCode>166024</OrphaCode>
+      <Name lang="en">Multiple epiphyseal dysplasia-macrocephaly-facial dysmorphism syndrome</Name>
+      <DisorderType id="21394"><Name lang="en">Disease</Name></DisorderType>
+      <DisorderGroup id="36547"><Name lang="en">Disorder</Name></DisorderGroup>
+      <DisorderGeneAssociationList count="1">
+        <DisorderGeneAssociation>
+          <SourceOfValidation>22587682[PMID]</SourceOfValidation>
+          <Gene id="20160">
+            <Name lang="en">kinesin family member 7</Name>
+            <Symbol>KIF7</Symbol>
+            <SynonymList count="1"><Synonym lang="en">JBTS12</Synonym></SynonymList>
+            <GeneType id="25993"><Name lang="en">gene with protein product</Name></GeneType>
+            <ExternalReferenceList count="7">
+              <ExternalReference id="250592"><Source>ClinVar</Source><Reference>KIF7</Reference></ExternalReference>
+              <ExternalReference id="57240"><Source>Ensembl</Source><Reference>ENSG00000166813</Reference></ExternalReference>
+              <ExternalReference id="51758"><Source>Genatlas</Source><Reference>KIF7</Reference></ExternalReference>
+              <ExternalReference id="51756"><Source>HGNC</Source><Reference>30497</Reference></ExternalReference>
+              <ExternalReference id="51757"><Source>OMIM</Source><Reference>611254</Reference></ExternalReference>
+              <ExternalReference id="51759"><Source>SwissProt</Source><Reference>Q2M1P5</Reference></ExternalReference>
+              <ExternalReference id="51760"><Source>Reactome</Source><Reference>R-HSA-5620971</Reference></ExternalReference>
+            </ExternalReferenceList>
+            <LocusList count="1">
+              <Locus id="22948">
+                <GeneLocus>15q26.1</GeneLocus>
+                <LocusKey>1</LocusKey>
+              </Locus>
+            </LocusList>
+          </Gene>
+          <DisorderGeneAssociationType id="17949"><Name lang="en">Disease-causing germline mutation(s) in</Name></DisorderGeneAssociationType>
+          <DisorderGeneAssociationStatus id="17991"><Name lang="en">Assessed</Name></DisorderGeneAssociationStatus>
+        </DisorderGeneAssociation>
+      </DisorderGeneAssociationList>
+    </Disorder>
+    <Disorder id="99999">
+      <OrphaCode>58</OrphaCode>
+      <Name lang="en">Alexander disease</Name>
+      <DisorderType id="21394"><Name lang="en">Disease</Name></DisorderType>
+      <DisorderGroup id="36547"><Name lang="en">Disorder</Name></DisorderGroup>
+      <DisorderGeneAssociationList count="1">
+        <DisorderGeneAssociation>
+          <SourceOfValidation>1234567[PMID]</SourceOfValidation>
+          <Gene id="99001">
+            <Name lang="en">glial fibrillary acidic protein</Name>
+            <Symbol>GFAP</Symbol>
+            <SynonymList count="0"/>
+            <GeneType id="25993"><Name lang="en">gene with protein product</Name></GeneType>
+            <ExternalReferenceList count="2">
+              <ExternalReference id="99002"><Source>HGNC</Source><Reference>4235</Reference></ExternalReference>
+              <ExternalReference id="99003"><Source>OMIM</Source><Reference>137780</Reference></ExternalReference>
+            </ExternalReferenceList>
+          </Gene>
+          <DisorderGeneAssociationType id="17949"><Name lang="en">Disease-causing germline mutation(s) in</Name></DisorderGeneAssociationType>
+          <DisorderGeneAssociationStatus id="17991"><Name lang="en">Assessed</Name></DisorderGeneAssociationStatus>
+        </DisorderGeneAssociation>
+      </DisorderGeneAssociationList>
+    </Disorder>
+  </DisorderList>
+</JDBOR>

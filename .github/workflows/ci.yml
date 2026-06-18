@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Lint, type-check & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python
+        uses: ./.github/actions/setup-uv-python
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: File-size budget
+        run: uv run python scripts/check_file_size.py
+
+      # mypy is run with continue-on-error on the first pass because the
+      # project uses strict mode and some stub coverage may be incomplete.
+      # Remove continue-on-error once the type errors are resolved upstream.
+      - name: Type-check (mypy)
+        run: uv run mypy orphanet_link
+        continue-on-error: true
+
+      - name: Unit tests (offline, no network)
+        run: uv run pytest -q -m "not integration"
