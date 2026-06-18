@@ -78,3 +78,27 @@ RESEARCH_USE_NOTICE = (
 def citation(version: str | None) -> str:
     """Return the required Orphadata citation for the given data version."""
     return CITATION_TEMPLATE.format(version=version or "unknown")
+
+
+# --- MCP capability surface constants ----------------------------------------
+
+#: Cross-reference prefixes surfaced by map_cross_ontology / resolve_xref.
+XREF_PREFIXES: list[str] = ["OMIM", "MONDO", "ICD-10", "ICD-11", "UMLS", "GARD", "MeSH", "MedDRA"]
+
+#: Mapping-relation codes ranked by precision (used in capabilities discovery).
+PREDICATE_RANK: dict[str, int] = dict(MAPPING_RELATION_RANK)
+
+#: Match types returned by resolve_disease.
+MATCH_TYPES: list[str] = ["orpha_id", "primary", "exact_synonym", "related_synonym", "xref"]
+
+#: Hard cap on items per batch call.
+MAX_BATCH_ITEMS: int = 50
+
+#: Orphanet / Orphadata license string.
+ORPHANET_LICENSE = (
+    f"Orphadata is CC BY 4.0 ({LICENSE_URL}). Required attribution: "
+    "Orphadata Science / INSERM. See orphanet://citation for the full citation template."
+)
+
+#: Recommended citation (dynamic version filled by the service; placeholder here).
+RECOMMENDED_CITATION = CITATION_TEMPLATE.format(version="<see get_diagnostics>")

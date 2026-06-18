@@ -1,15 +1,41 @@
-"""Dedicated stdio MCP entrypoint for orphanet-link.
+#!/usr/bin/env python3
+"""Stdio MCP entry point for Claude Desktop and similar clients.
 
-Placeholder during build-out; the stdio transport + data bootstrap are wired in a
-later task. Importing this module must stay side-effect free.
+For HTTP transport use `server.py --transport unified` (or `--transport http`).
 """
 
 from __future__ import annotations
 
+import asyncio
+import os
+import sys
+
 
 def main() -> None:
-    """Console-script entrypoint (``orphanet-link-mcp``)."""
-    raise SystemExit("orphanet-link MCP stdio entry is not wired yet; see implementation plan.")
+    """Run the orphanet-link MCP server on the stdio transport."""
+    # Configure environment BEFORE importing anything that may print to stdout.
+    os.environ.setdefault("ORPHANET_LINK_TRANSPORT", "stdio")
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    os.environ.setdefault("FASTMCP_DISABLE_BANNER", "1")
+    os.environ.setdefault("FASTMCP_QUIET", "1")
+    os.environ.setdefault("NO_COLOR", "1")
+
+    try:
+        from orphanet_link.logging_config import configure_logging
+        from orphanet_link.server_manager import UnifiedServerManager
+    except Exception as exc:
+        print(f"ERROR: orphanet_link import failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    logger = configure_logging()
+    manager = UnifiedServerManager(logger=logger)
+    try:
+        asyncio.run(manager.start_stdio_server())
+    except KeyboardInterrupt:
+        logger.info("MCP stdio server shutdown requested")
+    except Exception as exc:
+        logger.error("MCP stdio server error", error=str(exc))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
