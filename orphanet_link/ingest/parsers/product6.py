@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from lxml import etree
+
 from orphanet_link import constants
 
 from . import _common as c
@@ -31,11 +33,11 @@ class Product6Result:
             ``source_pmids``.
     """
 
-    genes: list[dict] = field(default_factory=list)
-    associations: list[dict] = field(default_factory=list)
+    genes: list[dict[str, str | None]] = field(default_factory=list)
+    associations: list[dict[str, str | None]] = field(default_factory=list)
 
 
-def _parse_gene(gene_el: object) -> dict:
+def _parse_gene(gene_el: etree._Element) -> dict[str, str | None]:
     """Extract a gene record from a ``<Gene>`` element.
 
     Args:
@@ -45,7 +47,7 @@ def _parse_gene(gene_el: object) -> dict:
         A dict with ``gene_symbol``, ``gene_name``, ``gene_type``, ``locus``,
         and one ``*_id`` column per entry in ``constants.GENE_XREF_COLUMN``.
     """
-    record: dict = {
+    record: dict[str, str | None] = {
         "gene_symbol": c.text(gene_el, "Symbol"),
         "gene_name": c.text(gene_el, "Name"),
         "gene_type": c.named(gene_el, "GeneType"),
@@ -57,10 +59,12 @@ def _parse_gene(gene_el: object) -> dict:
 
     for ext in gene_el.findall("ExternalReferenceList/ExternalReference"):
         source = c.text(ext, "Source")
+        if source is None:
+            continue
         reference = c.text(ext, "Reference")
-        col = constants.GENE_XREF_COLUMN.get(source)
-        if col is not None:
-            record[col] = reference
+        xref_col = constants.GENE_XREF_COLUMN.get(source)
+        if xref_col is not None:
+            record[xref_col] = reference
 
     return record
 

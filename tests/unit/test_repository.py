@@ -37,6 +37,40 @@ def repo(tmp_path_factory) -> OrphanetRepository:
     r.close()
 
 
+def _build_dup(tmp_path: Path) -> Path:
+    """Build an index where two specialty trees re-assert the same node chain.
+
+    Both ``en_product3_156.xml`` and ``en_product3_999.xml`` encode the
+    identical 156 -> 93419 -> 166024 chain, so ``classification_edge`` gets two
+    rows per edge.  This reproduces the missing-DISTINCT fan-out in
+    ``get_classification`` while leaving the shared ``repo`` fixture untouched.
+    """
+    cfg = OrphanetDataConfig(data_dir=tmp_path)
+    paths = {
+        "product1": FX / "en_product1.xml",
+        "product4": FX / "en_product4.xml",
+        "product6": FX / "en_product6.xml",
+        "product7": FX / "en_product7.xml",
+        "product9_prev": FX / "en_product9_prev.xml",
+        "product9_ages": FX / "en_product9_ages.xml",
+        "funct": FX / "en_funct_consequences.xml",
+    }
+    classification_paths = {
+        "156": FX / "en_product3_156.xml",
+        "999": FX / "en_product3_999.xml",
+    }
+    return build_database(cfg, paths, classification_paths)
+
+
+@pytest.fixture(scope="module")
+def repo_dup(tmp_path_factory) -> OrphanetRepository:
+    tmp = tmp_path_factory.mktemp("db_dup")
+    db = _build_dup(tmp)
+    r = OrphanetRepository(db)
+    yield r
+    r.close()
+
+
 # -- meta ---------------------------------------------------------------------
 
 
@@ -356,3 +390,20 @@ def test_get_descendants_envelope(repo):
     result = repo.get_descendants("156", limit=50, offset=0)
     assert "results" in result
     assert "total" in result
+
+
+# -- get_classification dedup (F1) --------------------------------------------
+
+
+def test_get_classification_parents_unique_by_code(repo_dup):
+    parents = repo_dup.get_classification("166024")["parents"]
+    codes = [p["orpha_code"] for p in parents]
+    assert len(codes) == len(set(codes)), f"duplicate parent codes: {codes}"
+    assert codes.count("93419") == 1
+
+
+def test_get_classification_children_unique_by_code(repo_dup):
+    children = repo_dup.get_classification("93419")["children"]
+    codes = [c["orpha_code"] for c in children]
+    assert len(codes) == len(set(codes)), f"duplicate child codes: {codes}"
+    assert codes.count("166024") == 1

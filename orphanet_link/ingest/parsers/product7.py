@@ -13,7 +13,7 @@ from pathlib import Path
 from . import _common as c
 
 
-def parse(path: str | Path) -> list[dict]:
+def parse(path: str | Path) -> list[dict[str, str | None]]:
     """Parse ``en_product7.xml`` into linearisation rows.
 
     Args:
@@ -24,7 +24,7 @@ def parse(path: str | Path) -> list[dict]:
         ``parent_code`` (str | None).  Root nodes have ``parent_code=None``.
         A disorder with multiple associations produces one row per association.
     """
-    rows: list[dict] = []
+    rows: list[dict[str, str | None]] = []
     for disorder in c.iter_disorders(path, "DisorderList"):
         code = c.text(disorder, "OrphaCode")
         if not code:

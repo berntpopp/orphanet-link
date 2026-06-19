@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import _common as c
 
@@ -17,8 +18,8 @@ from . import _common as c
 class Product1Result:
     """Parsed product-1 rows."""
 
-    disorders: list[dict] = field(default_factory=list)
-    xrefs: list[dict] = field(default_factory=list)
+    disorders: list[dict[str, Any]] = field(default_factory=list)
+    xrefs: list[dict[str, str | None]] = field(default_factory=list)
 
 
 def parse(path: str | Path) -> Product1Result:

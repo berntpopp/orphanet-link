@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from orphanet_link.exceptions import DataUnavailableError, InvalidInputError, NotFoundError
-from orphanet_link.identifiers import normalize_orpha_code, parse_curie
+from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, parse_curie
 from orphanet_link.services.pagination import page_fields
 from orphanet_link.services.resolution import resolve
 from orphanet_link.services.shaping import (
@@ -395,7 +395,13 @@ class OrphanetService:
         offset: int = 0,
         response_mode: str = DEFAULT_RESPONSE_MODE,
     ) -> dict[str, Any]:
-        """Find disorders associated with a gene symbol."""
+        """Find disorders associated with a gene symbol.
+
+        Gene symbols have no strict canonical format to validate against, so any
+        non-empty token is accepted (whitespace-trimmed; matched case-insensitively
+        in the repository). An unknown symbol returns ``total: 0`` by design — that
+        is a genuine "no Orphanet disorder records this gene", not a malformed input.
+        """
         raw = (gene_symbol or "").strip()
         if not raw:
             raise InvalidInputError(
@@ -420,19 +426,31 @@ class OrphanetService:
         offset: int = 0,
         response_mode: str = DEFAULT_RESPONSE_MODE,
     ) -> dict[str, Any]:
-        """Find disorders annotated with an HPO term."""
+        """Find disorders annotated with an HPO term.
+
+        The ``hpo_id`` is validated for shape (``HP:NNNNNNN``) and normalized before
+        the lookup, mirroring ``resolve_xref``'s CURIE handling: a malformed id
+        raises ``invalid_input`` (``field="hpo_id"``) instead of silently returning
+        an empty result, while a well-formed-but-absent id still returns ``total: 0``.
+        """
         raw = (hpo_id or "").strip()
         if not raw:
             raise InvalidInputError(
                 "hpo_id must be a non-empty HPO term id like HP:0000256.", field="hpo_id"
             )
+        canonical = normalize_hpo_id(raw)
+        if canonical is None:
+            raise InvalidInputError(
+                f"'{raw}' is not a valid HPO term id (expected HP:NNNNNNN, e.g. HP:0000256).",
+                field="hpo_id",
+            )
         limit = max(1, min(limit, _MAX_LIMIT))
         offset = max(0, offset)
-        result = self.repo.find_disorders_by_phenotype(raw, limit=limit, offset=offset)
+        result = self.repo.find_disorders_by_phenotype(canonical, limit=limit, offset=offset)
         hits = result.get("results", [])
         total = result.get("total", len(hits))
         return {
-            "hpo_id": raw,
+            "hpo_id": canonical,
             "results": hits,
             **page_fields(total=total, returned=len(hits), limit=limit, offset=offset),
             "orphanet_version": self._orphanet_version(),
@@ -448,6 +466,7 @@ class OrphanetService:
         for query in queries:
             try:
                 item = self.resolve_disease(query, response_mode=response_mode)
+                item.pop("orphanet_version", None)  # grounded once at top level (F4)
                 results.append({"success": True, **item})
             except Exception as exc:
                 results.append({"success": False, "query": query, "error": str(exc)})
@@ -468,6 +487,7 @@ class OrphanetService:
         for term in terms:
             try:
                 item = self.get_disease(term, response_mode=response_mode, fields=fields)
+                item.pop("orphanet_version", None)  # grounded once at top level (F4)
                 results.append({"success": True, **item})
             except Exception as exc:
                 results.append({"success": False, "term": term, "error": str(exc)})

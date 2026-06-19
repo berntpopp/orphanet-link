@@ -14,13 +14,14 @@ from orphanet_link.constants import (
     ORPHANET_LICENSE,
     PREDICATE_RANK,
     RECOMMENDED_CITATION,
+    RESEARCH_USE_NOTICE,
     XREF_PREFIXES,
 )
 from orphanet_link.mcp.arg_help import tool_signature
 from orphanet_link.mcp.resources import (
     ORPHANET_REFERENCE_NOTES,
     ORPHANET_USAGE_NOTES,
-    RESEARCH_USE_NOTICE,
+    render_predicate_ranking,
 )
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE, RESPONSE_MODES
@@ -121,6 +122,27 @@ def capabilities_version() -> str:
     return cached
 
 
+#: Per-release fingerprint cache for the lean ``_meta`` data anchor (see ``data_version``).
+_DATA_VERSION_CACHE: dict[str, str] = {}
+
+
+def data_version() -> str | None:
+    """Short, stable fingerprint (8 hex chars) of the loaded Orphanet release, or ``None``.
+
+    Echoed in every ``_meta`` -- including ``minimal`` -- so a consumer can always tie an
+    answer to the exact data release and detect when it changes between calls. The
+    human-readable release string + counts live in get_diagnostics / capabilities.
+    """
+    release = _orphanet_version()
+    if release is None:
+        return None
+    cached = _DATA_VERSION_CACHE.get(release)
+    if cached is None:
+        cached = hashlib.sha256(release.encode("utf-8")).hexdigest()[:8]
+        _DATA_VERSION_CACHE[release] = cached
+    return cached
+
+
 def build_capabilities() -> dict[str, Any]:
     """Return the discovery surface describing this server."""
     payload: dict[str, Any] = {
@@ -151,16 +173,19 @@ def build_capabilities() -> dict[str, Any]:
         "per_call_meta": [
             "tool",
             "request_id",
+            "data_version",
             "elapsed_ms",
             "capabilities_version",
             "next_commands",
         ],
         "per_call_meta_semantics": (
             "_meta verbosity is tiered by response_mode to control the per-call token "
-            "tax: minimal returns only {tool, request_id}; compact (default) adds "
-            "next_commands (workflow guidance) and capabilities_version (the warm-client "
-            "cache key) but omits elapsed_ms; standard/full add elapsed_ms. Every compact "
-            "or richer response carries next_commands; minimal is the explicit opt-out."
+            "tax: minimal returns {tool, request_id, data_version}; compact (default) "
+            "adds next_commands (workflow guidance) and capabilities_version (the "
+            "warm-client cache key) but omits elapsed_ms; standard/full add elapsed_ms. "
+            "data_version (a short fingerprint of the loaded Orphanet release) is "
+            "present in EVERY tier so any answer can be tied to its data version; "
+            "every compact or richer response also carries next_commands."
         ),
         "capabilities_version_semantics": (
             "_meta.capabilities_version is a content hash of this discovery contract. "
@@ -196,9 +221,10 @@ def build_capabilities() -> dict[str, Any]:
         "response_mode_semantics": (
             "standard/full return the complete record (structured synonyms with "
             "scope/type/sources, and the full definition on search hits); compact "
-            "(default) drops null/empty values, collapses synonyms to plain strings, "
-            "and returns search hits as orpha_code + name + score + a short "
-            "definition_snippet; minimal keeps only orpha_code + name."
+            "(default) drops null/empty values recursively (including inside nested "
+            "rows such as per-phenotype diagnostic_criteria), collapses synonyms to "
+            "plain strings, and returns search hits as orpha_code + name + score + a "
+            "short definition_snippet; minimal keeps only orpha_code + name."
         ),
         "match_type_semantics": (
             "resolve_disease.match_type is one of orpha_code | exact_label | search "
@@ -207,8 +233,9 @@ def build_capabilities() -> dict[str, Any]:
             "near-tie returns ambiguous_query instead."
         ),
         "predicate_ranking": (
-            "Cross-references are ranked by mapping predicate, strongest first: "
-            "exactMatch > equivalentTo > closeMatch > narrowMatch > broadMatch > xref."
+            "Cross-references are ranked by Orphanet mapping relation, strongest first: "
+            f"{render_predicate_ranking()} (E = exact). See predicate_rank for the "
+            "code-to-rank mapping."
         ),
         "recommended_workflows": [
             "label/id/xref -> resolve_disease -> get_disease",
@@ -226,8 +253,10 @@ def build_capabilities() -> dict[str, Any]:
         "not_found_contract": (
             "An id/label/xref with no term returns error_code 'not_found'. An "
             "ambiguous label returns 'ambiguous_query' with candidates and "
-            "next_commands to each candidate. An obsolete ORPHAcode returns "
-            "'not_found' with replaced_by successors and next_commands to them."
+            "next_commands to each candidate. Orphanet obsolescence / successor "
+            "links are not currently surfaced by this index (the ingested Orphadata "
+            "products carry no withdrawn/replaced-by data), so every resolvable "
+            "ORPHAcode is treated as active."
         ),
         "error_codes": ERROR_CODES,
         "limits": {

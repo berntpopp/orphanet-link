@@ -12,7 +12,7 @@ from pathlib import Path
 from . import _common as c
 
 
-def parse(path: str | Path) -> list[dict]:
+def parse(path: str | Path) -> list[dict[str, str | None]]:
     """Parse ``en_product4.xml`` into HPO disorder association rows.
 
     Args:
@@ -22,7 +22,7 @@ def parse(path: str | Path) -> list[dict]:
         A list of dicts with keys: ``orpha_code``, ``hpo_id``, ``hpo_term``,
         ``frequency``, ``diagnostic_criteria``.
     """
-    rows: list[dict] = []
+    rows: list[dict[str, str | None]] = []
     for disorder in c.iter_disorders(path, "HPODisorderSetStatusList", item="Disorder"):
         code = c.text(disorder, "OrphaCode")
         if not code:

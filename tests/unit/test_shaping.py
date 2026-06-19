@@ -84,6 +84,69 @@ def test_compact_preserves_meta_keys():
     assert "success" in result
 
 
+# -- compact recurses into nested rows (F4) -----------------------------------
+
+
+def _has_null(value):
+    """Recursively detect any None / empty value left in a payload."""
+    if value is None or value == "" or value == [] or value == {}:
+        return True
+    if isinstance(value, dict):
+        return any(_has_null(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_null(v) for v in value)
+    return False
+
+
+_NESTED = {
+    "orpha_code": "58",
+    "name": "Alexander disease",
+    "phenotypes": [
+        {
+            "hpo_id": "HP:0000256",
+            "hpo_term": "Macrocephaly",
+            "frequency": "Frequent",
+            "diagnostic_criteria": None,
+        },
+        {
+            "hpo_id": "HP:0001249",
+            "hpo_term": "Intellectual disability",
+            "frequency": None,
+            "diagnostic_criteria": "Pathognomonic",
+        },
+    ],
+    "meta_obj": {"a": 1, "b": None},
+}
+
+
+def test_compact_drops_nulls_inside_list_of_dicts():
+    result = shape(_NESTED, "compact")
+    # the ubiquitous diagnostic_criteria:null leak must be gone
+    assert "diagnostic_criteria" not in result["phenotypes"][0]
+    # other nulls inside rows drop too
+    assert "frequency" not in result["phenotypes"][1]
+    # non-null data is retained
+    assert result["phenotypes"][0]["hpo_id"] == "HP:0000256"
+    assert result["phenotypes"][1]["diagnostic_criteria"] == "Pathognomonic"
+
+
+def test_compact_drops_nulls_inside_nested_dict():
+    result = shape(_NESTED, "compact")
+    assert result["meta_obj"] == {"a": 1}
+
+
+def test_compact_has_no_null_values_anywhere():
+    result = shape(_NESTED, "compact")
+    assert not _has_null(result)
+
+
+def test_standard_keeps_nulls_inside_list_items():
+    result = shape(_NESTED, "standard")
+    # standard/full are the complete record -> nulls preserved
+    assert result["phenotypes"][0]["diagnostic_criteria"] is None
+    assert result["meta_obj"]["b"] is None
+
+
 # -- standard / full mode ------------------------------------------------------
 
 

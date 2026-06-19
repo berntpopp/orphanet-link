@@ -11,7 +11,7 @@ from pathlib import Path
 from . import _common as c
 
 
-def parse(path: str | Path) -> list[dict]:
+def parse(path: str | Path) -> list[dict[str, str | None]]:
     """Parse ``en_funct_consequences.xml`` into disability-annotation rows.
 
     Args:
@@ -22,7 +22,7 @@ def parse(path: str | Path) -> list[dict]:
         the keys ``orpha_code``, ``annotation``, ``frequency``, ``temporality``,
         and ``severity``.
     """
-    rows: list[dict] = []
+    rows: list[dict[str, str | None]] = []
     for disorder in c.iter_disorders(path, "DisorderDisabilityRelevanceList", item="Disorder"):
         code = c.text(disorder, "OrphaCode")
         if not code:

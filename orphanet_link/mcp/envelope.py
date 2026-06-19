@@ -233,6 +233,16 @@ def build_arg_error_envelope(
     }
 
 
+def _data_version() -> str | None:
+    """Cached short fingerprint of the loaded Orphanet release (never raises)."""
+    try:
+        from orphanet_link.mcp.capabilities import data_version
+
+        return data_version()
+    except Exception:  # pragma: no cover - the _meta echo must never break a tool
+        return None
+
+
 def _stamp_capabilities_version(meta: dict[str, Any]) -> None:
     """Add the cached capabilities_version to a ``_meta`` block when available."""
     version = _capabilities_version()
@@ -240,12 +250,20 @@ def _stamp_capabilities_version(meta: dict[str, Any]) -> None:
         meta["capabilities_version"] = version
 
 
+def _stamp_data_version(meta: dict[str, Any]) -> None:
+    """Add the cached data_version release anchor to a ``_meta`` block when available."""
+    fingerprint = _data_version()
+    if fingerprint:
+        meta["data_version"] = fingerprint
+
+
 def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     """Tier ``_meta`` verbosity by ``response_mode`` to control the per-call token tax.
 
-    - ``minimal``: the trace essentials only -- ``{tool, request_id}``. The caller
-      explicitly opted out of guidance, so ``next_commands`` / ``capabilities_version``
-      / ``elapsed_ms`` are dropped.
+    - ``minimal``: the trace essentials plus the data anchor --
+      ``{tool, request_id, source, data_version}``. The caller opted out of guidance,
+      so ``next_commands`` / ``capabilities_version`` / ``elapsed_ms`` are dropped, but
+      ``data_version`` stays so even the leanest answer is tied to its Orphanet release.
     - ``compact`` (default): keep ``next_commands`` (workflow guidance) and
       ``capabilities_version`` (the warm-client cache key the discovery contract leans
       on), but drop the ``elapsed_ms`` observability echo from the hot path -- it is
@@ -256,7 +274,10 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     richer (every default response still chains); ``minimal`` is the documented opt-out.
     """
     if response_mode == "minimal":
-        return {"tool": meta["tool"], "request_id": meta["request_id"], "source": "orphanet"}
+        lean = {"tool": meta["tool"], "request_id": meta["request_id"], "source": "orphanet"}
+        if "data_version" in meta:
+            lean["data_version"] = meta["data_version"]
+        return lean
     if response_mode in ("standard", "full"):
         return meta
     return {k: v for k, v in meta.items() if k != "elapsed_ms"}
@@ -285,6 +306,7 @@ async def run_mcp_tool(
                 "elapsed_ms": elapsed,
             }
             _stamp_capabilities_version(meta)
+            _stamp_data_version(meta)
             result["_meta"] = _shape_meta(meta, ctx.response_mode)
             metrics.record(tool_name, elapsed, ok=success)
         return result
@@ -293,6 +315,7 @@ async def run_mcp_tool(
         envelope = _error_envelope(exc, ctx)
         envelope["_meta"]["elapsed_ms"] = elapsed
         _stamp_capabilities_version(envelope["_meta"])
+        _stamp_data_version(envelope["_meta"])
         envelope["_meta"] = _shape_meta(envelope["_meta"], ctx.response_mode)
         metrics.record(tool_name, elapsed, ok=False)
         logger.warning(

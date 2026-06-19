@@ -16,6 +16,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from orphanet_link.config import OrphanetDataConfig
 from orphanet_link.constants import SCHEMA_VERSION
@@ -37,7 +38,7 @@ from orphanet_link.ingest.schema import load_schema_sql
 _BATCH = 5000
 
 
-def _executemany(conn: sqlite3.Connection, sql: str, rows: list[tuple]) -> None:
+def _executemany(conn: sqlite3.Connection, sql: str, rows: list[tuple[Any, ...]]) -> None:
     """Batch-insert ``rows`` with ``executemany`` in chunks of ``_BATCH``."""
     for start in range(0, len(rows), _BATCH):
         conn.executemany(sql, rows[start : start + _BATCH])

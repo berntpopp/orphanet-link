@@ -2,7 +2,24 @@
 
 from __future__ import annotations
 
-from orphanet_link.constants import ORPHANET_LICENSE, RESEARCH_USE_NOTICE
+from orphanet_link.constants import (
+    MATCH_TYPES,
+    ORPHANET_LICENSE,
+    PREDICATE_RANK,
+    RESEARCH_USE_NOTICE,
+)
+
+
+def render_match_types() -> str:
+    """Render the resolve_disease match_type vocabulary from ``MATCH_TYPES``."""
+    return " | ".join(MATCH_TYPES)
+
+
+def render_predicate_ranking() -> str:
+    """Render the mapping-relation codes from ``PREDICATE_RANK``, strongest first."""
+    codes = [code for code, _ in sorted(PREDICATE_RANK.items(), key=lambda kv: kv[1])]
+    return " > ".join(codes)
+
 
 ORPHANET_SERVER_INSTRUCTIONS = (
     "Orphanet-Link grounds disease work in the Orphanet rare disease database "
@@ -41,11 +58,11 @@ ORPHANET_USAGE_NOTES = (
 ORPHANET_REFERENCE_NOTES = (
     "Error codes (7): invalid_input, not_found, ambiguous_query, data_unavailable, "
     "rate_limited, upstream_unavailable, internal_error. match_type on "
-    "resolve_disease is one of orpha_id | primary | exact_synonym | related_synonym "
-    "| xref (strongest first). Cross-references are ranked by mapping relation: "
-    "E (exact) > NTBT > BTNT > ND > W. Supported xref sources: OMIM, MONDO, ICD-10, "
-    "ICD-11, UMLS, GARD, MeSH, MedDRA. The local index is built from Orphadata XML "
-    "releases (data source = Orphanet / INSERM); get_diagnostics reports the loaded "
+    f"resolve_disease is one of {render_match_types()} (strongest first). "
+    "Cross-references are ranked by mapping relation: "
+    f"{render_predicate_ranking()} (E = exact). Supported xref sources: OMIM, MONDO, "
+    "ICD-10, ICD-11, UMLS, GARD, MeSH, MedDRA. The local index is built from Orphadata "
+    "XML releases (data source = Orphanet / INSERM); get_diagnostics reports the loaded "
     f"release version and counts. {ORPHANET_LICENSE}"
 )
 

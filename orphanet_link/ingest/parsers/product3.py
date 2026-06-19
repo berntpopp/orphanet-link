@@ -30,15 +30,15 @@ class Product3Result:
             file.
     """
 
-    edges: list[dict] = field(default_factory=list)
-    specialty: dict | None = None
+    edges: list[dict[str, str]] = field(default_factory=list)
+    specialty: dict[str, str] | None = None
 
 
 def _walk(
     node: etree._Element,
     parent_code: str | None,
     specialty_id: str,
-    edges: list[dict],
+    edges: list[dict[str, str]],
 ) -> None:
     """Recursively walk a ``<ClassificationNode>`` subtree.
 

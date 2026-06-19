@@ -66,7 +66,7 @@ def refresh_specialty_ids() -> list[str]:
         Sorted list of specialty ID strings found on the page.
     """
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore[import]
+        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
     except ImportError as exc:
         raise ImportError(
             "Playwright is not installed. "

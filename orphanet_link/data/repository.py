@@ -229,8 +229,12 @@ class OrphanetRepository:
     ) -> dict[str, Any]:
         """Find disorders for a gene symbol (case-insensitive); paginated envelope."""
         sym_upper = gene_symbol.upper()
+        # ``disorder_gene`` has no unique constraint: a disorder linked to the
+        # same gene via >1 association row would fan out the join.  DISTINCT +
+        # COUNT(DISTINCT ...) keep results and ``total`` deduped and aligned.
+        # (Not reproducible at fixture scale — applied defensively.)
         rows = self._conn.execute(
-            "SELECT dg.orpha_code, d.name "
+            "SELECT DISTINCT dg.orpha_code, d.name "
             "FROM disorder_gene dg "
             "JOIN disorder d ON d.orpha_code = dg.orpha_code "
             "WHERE UPPER(dg.gene_symbol) = ? "
@@ -239,7 +243,8 @@ class OrphanetRepository:
         ).fetchall()
         total = int(
             self._conn.execute(
-                "SELECT COUNT(*) AS n FROM disorder_gene WHERE UPPER(gene_symbol) = ?",
+                "SELECT COUNT(DISTINCT orpha_code) AS n "
+                "FROM disorder_gene WHERE UPPER(gene_symbol) = ?",
                 (sym_upper,),
             ).fetchone()["n"]
         )
@@ -276,8 +281,12 @@ class OrphanetRepository:
         self, hpo_id: str, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:
         """Find disorders annotated with ``hpo_id``; paginated envelope."""
+        # ``phenotype`` has no unique constraint: a disorder annotated with the
+        # same HPO id via >1 row would fan out the join.  DISTINCT +
+        # COUNT(DISTINCT ...) keep results and ``total`` deduped and aligned.
+        # (Not reproducible at fixture scale — applied defensively.)
         rows = self._conn.execute(
-            "SELECT p.orpha_code, d.name "
+            "SELECT DISTINCT p.orpha_code, d.name "
             "FROM phenotype p "
             "JOIN disorder d ON d.orpha_code = p.orpha_code "
             "WHERE p.hpo_id = ? "
@@ -286,7 +295,8 @@ class OrphanetRepository:
         ).fetchall()
         total = int(
             self._conn.execute(
-                "SELECT COUNT(*) AS n FROM phenotype WHERE hpo_id = ?", (hpo_id,)
+                "SELECT COUNT(DISTINCT orpha_code) AS n FROM phenotype WHERE hpo_id = ?",
+                (hpo_id,),
             ).fetchone()["n"]
         )
         results = [{"orpha_code": r["orpha_code"], "name": r["name"]} for r in rows]
@@ -335,15 +345,18 @@ class OrphanetRepository:
 
     def get_classification(self, code: str) -> dict[str, Any]:
         """Return ``{parents, children}`` from ``classification_edge`` with names."""
+        # ``classification_edge`` has no unique constraint: the same parent→child
+        # edge asserted in multiple specialty trees yields duplicate rows, so we
+        # DISTINCT over the projected (code, name) pair.
         parent_rows = self._conn.execute(
-            "SELECT e.parent_code AS orpha_code, d.name "
+            "SELECT DISTINCT e.parent_code AS orpha_code, d.name "
             "FROM classification_edge e "
             "LEFT JOIN disorder d ON d.orpha_code = e.parent_code "
             "WHERE e.orpha_code = ? ORDER BY d.name",
             (code,),
         ).fetchall()
         child_rows = self._conn.execute(
-            "SELECT e.orpha_code, d.name "
+            "SELECT DISTINCT e.orpha_code, d.name "
             "FROM classification_edge e "
             "LEFT JOIN disorder d ON d.orpha_code = e.orpha_code "
             "WHERE e.parent_code = ? ORDER BY d.name",

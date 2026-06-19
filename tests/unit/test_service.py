@@ -172,6 +172,20 @@ def test_get_disease_batch_good_entry_has_name(svc):
     assert good["name"] is not None
 
 
+def test_resolve_disease_batch_items_omit_version(svc):
+    # orphanet_version is grounded ONCE at the top level, not echoed per item (F4)
+    result = svc.resolve_disease_batch(["ORPHA:58"])
+    assert result["orphanet_version"] is not None
+    assert "orphanet_version" not in result["results"][0]
+
+
+def test_get_disease_batch_items_omit_version(svc):
+    result = svc.get_disease_batch(["ORPHA:166024"])
+    assert result["orphanet_version"] is not None
+    good = next(r for r in result["results"] if r.get("success") is True)
+    assert "orphanet_version" not in good
+
+
 # -- get_diagnostics -----------------------------------------------------------
 
 
@@ -294,3 +308,34 @@ def test_find_diseases_by_phenotype(svc):
     result = svc.find_diseases_by_phenotype("HP:0000256")
     codes = [r["orpha_code"] for r in result["results"]]
     assert "58" in codes
+
+
+def test_find_diseases_by_phenotype_malformed_raises(svc):
+    from orphanet_link.exceptions import InvalidInputError
+
+    with pytest.raises(InvalidInputError) as exc:
+        svc.find_diseases_by_phenotype("NOT_AN_HPO_ID")
+    assert exc.value.field == "hpo_id"
+
+
+def test_find_diseases_by_phenotype_dropped_digit_raises(svc):
+    from orphanet_link.exceptions import InvalidInputError
+
+    # 6 digits (a typo) must be rejected, not silently swallowed as "no matches"
+    with pytest.raises(InvalidInputError):
+        svc.find_diseases_by_phenotype("HP:000256")
+
+
+def test_find_diseases_by_phenotype_wellformed_absent_is_empty(svc):
+    # well-formed but absent -> success path with total 0 (NOT an error)
+    result = svc.find_diseases_by_phenotype("HP:9999999")
+    assert result["total"] == 0
+    assert result["results"] == []
+
+
+def test_find_diseases_by_phenotype_normalizes_hpo_prefix(svc):
+    # HPO: prefix and HP: prefix must resolve to the same canonical id and match
+    result = svc.find_diseases_by_phenotype("HPO:0000256")
+    codes = [r["orpha_code"] for r in result["results"]]
+    assert "58" in codes
+    assert result["hpo_id"] == "HP:0000256"

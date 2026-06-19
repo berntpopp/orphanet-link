@@ -9,11 +9,12 @@ per prevalence item rather than one per disorder.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from . import _common as c
 
 
-def parse(path: str | Path) -> list[dict]:
+def parse(path: str | Path) -> list[dict[str, Any]]:
     """Parse ``en_product9_prev.xml`` into one prevalence row per entry.
 
     Args:
@@ -25,7 +26,7 @@ def parse(path: str | Path) -> list[dict]:
         ``val_moy``, ``geographic``, ``qualification``, ``validation_status``,
         and ``source``.
     """
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     for disorder in c.iter_disorders(path, "DisorderList"):
         code = c.text(disorder, "OrphaCode")
         if not code:

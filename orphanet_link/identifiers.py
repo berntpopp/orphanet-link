@@ -10,6 +10,10 @@ _ORPHA_RE = re.compile(r"^\s*(?:orpha(?:net)?\s*[:_]?\s*)?(\d{1,7})\s*$", re.IGN
 #: A CURIE like "OMIM:607131", "ICD-10:Q77.3", "HP:0000256".
 _CURIE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9.\-]*)\s*:\s*(.+?)\s*$")
 
+#: An HPO term id: an HP/HPO prefix (case-insensitive) + exactly seven digits.
+#: A bare number or a wrong digit count is intentionally NOT matched.
+_HPO_RE = re.compile(r"^\s*hpo?\s*[:_]?\s*(\d{7})\s*$", re.IGNORECASE)
+
 #: Known cross-reference prefixes (normalized casing) that ``parse_curie`` should
 #: recognize as a real ontology/database prefix rather than free text.
 _KNOWN_PREFIXES = {
@@ -44,6 +48,20 @@ def normalize_orpha_code(value: str) -> str | None:
 def is_orpha_code(value: str) -> bool:
     """True if ``value`` parses as an ORPHAcode."""
     return normalize_orpha_code(value) is not None
+
+
+def normalize_hpo_id(value: str) -> str | None:
+    """Return the canonical ``HP:NNNNNNN`` form, or ``None`` if not a valid HPO id.
+
+    Accepts ``"HP:0000256"``, ``"HPO:0000256"``, ``"HP_0000256"``, ``"HP0000256"``
+    (case-insensitive, surrounding whitespace ignored). Requires the ``HP``/``HPO``
+    prefix and exactly seven digits, so a typo such as ``"HP:000256"`` (a dropped
+    digit) or a bare number is rejected rather than silently treated as a miss.
+    """
+    if not value:
+        return None
+    match = _HPO_RE.match(value)
+    return f"HP:{match.group(1)}" if match else None
 
 
 def parse_curie(value: str) -> tuple[str | None, str]:

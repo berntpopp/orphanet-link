@@ -154,6 +154,15 @@ async def test_find_diseases_by_phenotype_success(facade: FastMCP) -> None:
     assert "_meta" in result
 
 
+async def test_find_diseases_by_phenotype_malformed_returns_invalid_input(facade: FastMCP) -> None:
+    # A malformed hpo_id must surface invalid_input + field, not a silent empty result
+    result = await _call(facade, "find_diseases_by_phenotype", hpo_id="NOT_AN_HPO_ID")
+    assert result["success"] is False
+    assert result["error_code"] == "invalid_input"
+    assert result.get("field") == "hpo_id"
+    assert "_meta" in result
+
+
 # ---------------------------------------------------------------------------
 # Classification / hierarchy
 # ---------------------------------------------------------------------------
@@ -226,9 +235,34 @@ async def test_get_disease_batch_success(facade: FastMCP) -> None:
     assert result["count"] == 2
 
 
+async def test_get_disease_batch_grounds_version_once(facade: FastMCP) -> None:
+    # F4: orphanet_version is grounded ONCE at the top level, not echoed per item
+    result = await _call(facade, "get_disease_batch", terms=[_ORPHA_KIF7, _ORPHA_58])
+    assert result.get("orphanet_version")
+    for row in result["results"]:
+        assert "orphanet_version" not in row
+
+
+async def test_resolve_disease_batch_grounds_version_once(facade: FastMCP) -> None:
+    result = await _call(facade, "resolve_disease_batch", queries=[_ORPHA_KIF7, _ORPHA_58])
+    assert result.get("orphanet_version")
+    for row in result["results"]:
+        assert "orphanet_version" not in row
+
+
 # ---------------------------------------------------------------------------
 # Error envelope contract
 # ---------------------------------------------------------------------------
+
+
+async def test_minimal_meta_carries_data_version(facade: FastMCP) -> None:
+    # Observability: even the leanest (minimal) _meta anchors the data release so a
+    # consumer can always tie an answer to the exact Orphanet version it came from.
+    result = await _call(facade, "get_disease", term=_ORPHA_KIF7, response_mode="minimal")
+    meta = result["_meta"]
+    assert meta["tool"] == "get_disease"
+    assert "request_id" in meta
+    assert meta.get("data_version"), "minimal _meta must carry a data_version release anchor"
 
 
 async def test_unknown_term_returns_error_envelope(facade: FastMCP) -> None:

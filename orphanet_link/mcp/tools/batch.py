@@ -64,9 +64,12 @@ def register_batch_tools(mcp: FastMCP) -> None:
             _require_batch(queries, "queries")
             svc = get_orphanet_service()
             results: list[dict[str, Any]] = []
+            version: str | None = None
             for query in queries:
                 try:
                     rec = svc.resolve_disease(query, response_mode=response_mode)
+                    item_version = rec.pop("orphanet_version", None)  # grounded once (F4)
+                    version = version or item_version
                     results.append({**rec, "query": query, "ok": True})
                 except Exception as exc:  # per-item boundary; the call still succeeds
                     code, message = classify_exception(exc)
@@ -74,6 +77,8 @@ def register_batch_tools(mcp: FastMCP) -> None:
                         {"query": query, "ok": False, "error_code": code, "message": message}
                     )
             payload: dict[str, Any] = {"count": len(results), "results": results}
+            if version:
+                payload["orphanet_version"] = version
             payload.setdefault("_meta", {})["next_commands"] = after_resolve_batch(payload)
             return payload
 
@@ -106,9 +111,12 @@ def register_batch_tools(mcp: FastMCP) -> None:
             _require_batch(terms, "terms")
             svc = get_orphanet_service()
             results: list[dict[str, Any]] = []
+            version: str | None = None
             for term in terms:
                 try:
                     rec = svc.get_disease(term, response_mode=response_mode, fields=fields)
+                    item_version = rec.pop("orphanet_version", None)  # grounded once (F4)
+                    version = version or item_version
                     results.append({**rec, "term": term, "ok": True})
                 except Exception as exc:  # per-item boundary; the call still succeeds
                     code, message = classify_exception(exc)
@@ -116,6 +124,8 @@ def register_batch_tools(mcp: FastMCP) -> None:
                         {"term": term, "ok": False, "error_code": code, "message": message}
                     )
             payload: dict[str, Any] = {"count": len(results), "results": results}
+            if version:
+                payload["orphanet_version"] = version
             payload.setdefault("_meta", {})["next_commands"] = after_get_disease_batch(payload)
             return payload
 

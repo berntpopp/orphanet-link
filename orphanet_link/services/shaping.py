@@ -1,8 +1,10 @@
 """Response-mode projection for Orphanet disease payloads.
 
 ``standard`` / ``full`` are the identity (the complete record). ``compact``
-(the default) drops null/empty values. ``minimal`` keeps only the identity
-anchors (``orpha_code`` + ``name`` + ``orphanet_version``).
+(the default) drops null/empty values **recursively** — including inside nested
+objects and list-of-dict rows, so a per-row ``diagnostic_criteria: null`` (and
+peers) never reaches the wire. ``minimal`` keeps only the identity anchors
+(``orpha_code`` + ``name`` + ``orphanet_version``).
 """
 
 from __future__ import annotations
@@ -31,6 +33,19 @@ def _is_empty(value: Any) -> bool:
     return value is None or value == [] or value == "" or value == {}
 
 
+def _compact_value(value: Any) -> Any:
+    """Recursively drop null/empty values from dicts, incl. dicts nested in lists.
+
+    Scalars pass through unchanged; list items are cleaned element-wise so a
+    per-row ``diagnostic_criteria: null`` (and any other null field) vanishes.
+    """
+    if isinstance(value, dict):
+        return {k: _compact_value(v) for k, v in value.items() if not _is_empty(v)}
+    if isinstance(value, list):
+        return [_compact_value(item) for item in value]
+    return value
+
+
 def shape(
     record: dict[str, Any],
     response_mode: str,
@@ -50,12 +65,16 @@ def shape(
     elif response_mode in ("standard", "full"):
         shaped = dict(record)
     else:
-        # compact
+        # compact: drop null/empty top-level keys, then recurse into the rest so
+        # nested rows (e.g. phenotypes) carry no null fields either.
         shaped = {}
         for key, value in record.items():
-            if key not in _PRESERVE_KEYS and _is_empty(value):
+            if key in _PRESERVE_KEYS:
+                shaped[key] = value
                 continue
-            shaped[key] = value
+            if _is_empty(value):
+                continue
+            shaped[key] = _compact_value(value)
 
     if fields is not None:
         return _select_fields(shaped, fields, anchors)

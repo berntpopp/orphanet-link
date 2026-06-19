@@ -17,7 +17,7 @@ import os
 import sqlite3
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -45,11 +45,11 @@ def _release_url(config: OrphanetDataConfig) -> str:
     return f"{base}/tags/{config.release_tag}"
 
 
-def _find_asset(assets: list[dict], name: str) -> str:
+def _find_asset(assets: list[dict[str, Any]], name: str) -> str:
     """Return the browser_download_url for *name*, or raise DataUnavailableError."""
     for asset in assets:
         if asset.get("name") == name:
-            url = asset.get("browser_download_url", "")
+            url: str = asset.get("browser_download_url", "")
             if url:
                 return url
     raise DataUnavailableError(f"Release asset '{name}' not found in GitHub Release.")
@@ -135,7 +135,7 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
     except httpx.HTTPError as exc:
         raise DataUnavailableError(f"Network error fetching release metadata: {exc}") from exc
 
-    assets: list[dict] = release.get("assets", [])
+    assets: list[dict[str, Any]] = release.get("assets", [])
     gz_url = _find_asset(assets, _ASSET_GZ)
     sha_url = _find_asset(assets, _ASSET_SHA)
 
