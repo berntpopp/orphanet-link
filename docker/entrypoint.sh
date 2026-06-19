@@ -7,7 +7,9 @@
 set -euo pipefail
 
 echo "[entrypoint] Ensuring the Orphanet database exists..."
-if uv run python -c "
+# Use the production venv's python directly (on PATH); `uv run` would try to
+# create a project .venv, which the non-root user cannot write in this image.
+if python -c "
 from orphanet_link.config import settings
 from orphanet_link.services.data_resolver import ensure_database
 ensure_database(settings.data)
