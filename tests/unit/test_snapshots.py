@@ -251,5 +251,6 @@ async def test_snapshot_get_disease_disability(facade: FastMCP) -> None:
         "orpha_code": "166024",
         "name": _NAME_166024,
         "count": 0,
+        "coverage": "none",
         "_meta": _meta("get_disease_disability", [_step("get_disease", "166024")]),
     }

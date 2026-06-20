@@ -11,7 +11,7 @@ from orphanet_link.mcp import metrics
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.capabilities import collect_tool_signatures, project_capabilities
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
-from orphanet_link.mcp.next_commands import after_capabilities, cmd
+from orphanet_link.mcp.next_commands import DISCOVERY_PLACEHOLDER_QUERY, after_capabilities, cmd
 from orphanet_link.mcp.schemas import CAPABILITIES_SCHEMA, DIAGNOSTICS_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 
@@ -76,7 +76,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
             payload["build"] = build_info()
             payload["runtime"] = metrics.snapshot()
             payload.setdefault("_meta", {})["next_commands"] = (
-                [cmd("resolve_disease", query="Aicardi syndrome")]
+                [cmd("resolve_disease", query=DISCOVERY_PLACEHOLDER_QUERY)]
                 if payload.get("index_built")
                 else [cmd("get_server_capabilities")]
             )

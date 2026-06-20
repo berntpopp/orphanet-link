@@ -144,46 +144,9 @@ def test_get_disease_ancestors_pagination_fields(svc):
 
 
 # -- batch operations ----------------------------------------------------------
-
-
-def test_resolve_disease_batch_partial_success(svc):
-    result = svc.resolve_disease_batch(["ORPHA:58", "ORPHA:9999999"])
-    assert result["total"] == 2
-    successes = [r for r in result["results"] if r.get("success") is True]
-    failures = [r for r in result["results"] if r.get("success") is False]
-    assert len(successes) == 1
-    assert len(failures) == 1
-    assert successes[0]["orpha_code"] == "58"
-    assert "error" in failures[0]
-
-
-def test_get_disease_batch_partial_success(svc):
-    result = svc.get_disease_batch(["ORPHA:166024", "ORPHA:9999999"])
-    assert result["total"] == 2
-    successes = [r for r in result["results"] if r.get("success") is True]
-    failures = [r for r in result["results"] if r.get("success") is False]
-    assert len(successes) == 1
-    assert len(failures) == 1
-
-
-def test_get_disease_batch_good_entry_has_name(svc):
-    result = svc.get_disease_batch(["ORPHA:166024", "ORPHA:9999999"])
-    good = next(r for r in result["results"] if r.get("success") is True)
-    assert good["name"] is not None
-
-
-def test_resolve_disease_batch_items_omit_version(svc):
-    # orphanet_version is grounded ONCE at the top level, not echoed per item (F4)
-    result = svc.resolve_disease_batch(["ORPHA:58"])
-    assert result["orphanet_version"] is not None
-    assert "orphanet_version" not in result["results"][0]
-
-
-def test_get_disease_batch_items_omit_version(svc):
-    result = svc.get_disease_batch(["ORPHA:166024"])
-    assert result["orphanet_version"] is not None
-    good = next(r for r in result["results"] if r.get("success") is True)
-    assert "orphanet_version" not in good
+# Batch lives in the MCP tool layer (mcp/tools/batch.py), exercised by
+# tests/unit/test_tools_e2e.py, test_boundaries.py, and test_batch_recovery.py.
+# OrphanetService has no *_batch methods (the divergent unused pair was removed).
 
 
 # -- get_diagnostics -----------------------------------------------------------

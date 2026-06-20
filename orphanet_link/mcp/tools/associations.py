@@ -48,6 +48,7 @@ def register_association_tools(mcp: FastMCP) -> None:
         description=(
             "Return gene-disease associations for an Orphanet disorder: gene symbol, "
             "HGNC id, association type, and cross-references (OMIM, Ensembl, etc.). "
+            "count is the number of leaf gene rows, not grouped associations. "
             "Signature: get_disease_genes(term, response_mode=)."
         ),
     )
@@ -177,7 +178,10 @@ def register_association_tools(mcp: FastMCP) -> None:
         tags={"disease", "functional"},
         description=(
             "Return functional consequence (disability) data for an Orphanet disorder: "
-            "ability categories affected and severity grades. "
+            "ability categories affected and severity grades. Data coverage is partial: "
+            "many disorders carry no Orphadata functional-consequence annotation, so a "
+            "valid result can be empty -- coverage:'none' with count:0 marks this "
+            "explicitly (it is NOT an error); coverage:'present' means rows exist. "
             "Signature: get_disease_disability(term, response_mode=)."
         ),
     )

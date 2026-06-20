@@ -104,7 +104,8 @@ def register_disease_tools(mcp: FastMCP) -> None:
             "Return an Orphanet disease record: definition, synonyms, grouped "
             "cross-references, classification parents/children, age of onset, "
             "inheritance, and disorder type. The term accepts an ORPHAcode, a "
-            "label/synonym, or an external xref CURIE (resolved first). "
+            "label/synonym, or an external xref CURIE (resolved first). xrefs are "
+            "grouped by source; any nested count is leaf rows, not groups. "
             "Pass fields=['xrefs.OMIM', ...] for a sparse projection. "
             "Signature: get_disease(term, response_mode=, fields=)."
         ),

@@ -187,6 +187,15 @@ A piece of work is done when ALL of the following are true:
   must be stored and returned verbatim.
 - Prevalence is multi-valued per disorder (multiple types, geographies, statuses).
   Never aggregate or deduplicate prevalence rows.
+- `count` in any payload is the number of **leaf rows**, not the number of groups.
+  In `map_cross_ontology` it counts individual mapping targets across all source
+  groups (so 2 source groups with 3 targets total reports `count: 3`); in
+  `get_disease_genes` it counts gene rows. Document this in the docstring of any
+  new grouped-payload tool.
+- `get_disease_disability` data coverage is partial: a disorder with no Orphadata
+  functional-consequence annotation returns `count: 0` with `coverage: "none"`
+  (a valid empty result, never an error); annotated disorders return
+  `coverage: "present"`.
 
 ---
 

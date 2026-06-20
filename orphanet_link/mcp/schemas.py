@@ -262,6 +262,9 @@ DISEASE_DISABILITY_SCHEMA = _envelope(
     orpha_code=_STR,
     name=_STR_NULL,
     count=_INT,
+    #: "present" when Orphadata records functional consequences, "none" when it does
+    #: not (a valid, common state -- never an error). See get_disease_disability.
+    coverage=_STR,
     disability=_ARR,
 )
 

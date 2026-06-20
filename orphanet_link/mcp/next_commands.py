@@ -11,6 +11,12 @@ from typing import Any
 
 from orphanet_link.identifiers import is_orpha_code, parse_curie
 
+#: Generic fill-in for the two context-free discovery tools' next step. The
+#: discovery tools have no query context, so they must not emit a concrete disease
+#: label (it reads as a fabricated Orphanet answer, F-02); this bracketed token is
+#: self-evidently a template the agent replaces with the user's term.
+DISCOVERY_PLACEHOLDER_QUERY = "<disease name or ORPHAcode>"
+
 
 def cmd(tool: str, **arguments: Any) -> dict[str, Any]:
     """One ready-to-call next step."""
@@ -96,8 +102,15 @@ def withdrawn_recovery(replaced_by: list[dict[str, str]]) -> list[dict[str, Any]
 
 
 def after_capabilities() -> list[dict[str, Any]]:
-    """After get_server_capabilities: start the canonical resolve->record workflow."""
-    return [cmd("resolve_disease", query="Aicardi syndrome"), cmd("get_diagnostics")]
+    """After get_server_capabilities: start the canonical resolve->record workflow.
+
+    Context-free, so the resolve step carries the generic placeholder rather than a
+    canned disease label (F-02); the agent substitutes the user's term.
+    """
+    return [
+        cmd("resolve_disease", query=DISCOVERY_PLACEHOLDER_QUERY),
+        cmd("get_diagnostics"),
+    ]
 
 
 def after_resolve_disease(resolution: dict[str, Any]) -> list[dict[str, Any]]:

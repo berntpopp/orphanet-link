@@ -259,6 +259,9 @@ class OrphanetService:
                 "name": resolved["name"],
                 "disability": disability,
                 "count": len(disability),
+                # Distinguish "no Orphadata functional-consequence annotation" (a valid,
+                # common state) from an error: agents must not read count:0 as failure.
+                "coverage": "present" if disability else "none",
                 "orphanet_version": self._orphanet_version(),
             },
             response_mode,
@@ -456,43 +459,7 @@ class OrphanetService:
             "orphanet_version": self._orphanet_version(),
         }
 
-    def resolve_disease_batch(
-        self,
-        queries: list[str],
-        response_mode: str = DEFAULT_RESPONSE_MODE,
-    ) -> dict[str, Any]:
-        """Resolve a list of queries; returns partial success with per-item status."""
-        results = []
-        for query in queries:
-            try:
-                item = self.resolve_disease(query, response_mode=response_mode)
-                item.pop("orphanet_version", None)  # grounded once at top level (F4)
-                results.append({"success": True, **item})
-            except Exception as exc:
-                results.append({"success": False, "query": query, "error": str(exc)})
-        return {
-            "results": results,
-            "total": len(results),
-            "orphanet_version": self._orphanet_version(),
-        }
-
-    def get_disease_batch(
-        self,
-        terms: list[str],
-        response_mode: str = DEFAULT_RESPONSE_MODE,
-        fields: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Return full disease records for a list of terms; partial success."""
-        results = []
-        for term in terms:
-            try:
-                item = self.get_disease(term, response_mode=response_mode, fields=fields)
-                item.pop("orphanet_version", None)  # grounded once at top level (F4)
-                results.append({"success": True, **item})
-            except Exception as exc:
-                results.append({"success": False, "term": term, "error": str(exc)})
-        return {
-            "results": results,
-            "total": len(results),
-            "orphanet_version": self._orphanet_version(),
-        }
+    # NOTE: batch is implemented in the MCP tool layer (mcp/tools/batch.py), which
+    # loops these single-item methods and shapes per-item {ok, error_code, ...} rows
+    # via the shared classify_exception. No service-level *_batch helpers exist (a
+    # prior pair returned a divergent {success, error} shape and were unused).
