@@ -17,6 +17,7 @@ from orphanet_link.constants import (
     RESEARCH_USE_NOTICE,
     XREF_PREFIXES,
 )
+from orphanet_link.mcp import metrics
 from orphanet_link.mcp.arg_help import tool_signature
 from orphanet_link.mcp.resources import (
     ORPHANET_REFERENCE_NOTES,
@@ -117,8 +118,11 @@ def capabilities_version() -> str:
     key = _orphanet_version() or "unbuilt"
     cached = _VERSION_CACHE.get(key)
     if cached is None:
+        metrics.record_cache("capabilities_version", hit=False)
         cached = build_capabilities()["capabilities_version"]
         _VERSION_CACHE[key] = cached
+    else:
+        metrics.record_cache("capabilities_version", hit=True)
     return cached
 
 
@@ -138,8 +142,11 @@ def data_version() -> str | None:
         return None
     cached = _DATA_VERSION_CACHE.get(release)
     if cached is None:
+        metrics.record_cache("data_version", hit=False)
         cached = hashlib.sha256(release.encode("utf-8")).hexdigest()[:8]
         _DATA_VERSION_CACHE[release] = cached
+    else:
+        metrics.record_cache("data_version", hit=True)
     return cached
 
 

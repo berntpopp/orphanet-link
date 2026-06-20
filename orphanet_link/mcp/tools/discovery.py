@@ -64,9 +64,10 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         description=(
             "Report the local Orphanet index status: whether the data is built, the "
             "loaded Orphanet release version, disorder counts, schema version, and when "
-            "it was built, plus a runtime block (request/error counts and latency "
-            "percentiles p50/p95/p99). Use this to confirm freshness or diagnose a "
-            "data_unavailable error. "
+            "it was built, plus a runtime block (request/error counts, latency "
+            "percentiles p50/p95/p99, a response_mode distribution that surfaces "
+            "over-fetch, and a version-hash cache hit/miss ratio). Use this to confirm "
+            "freshness or diagnose a data_unavailable error. "
             "Signature: get_diagnostics()."
         ),
     )

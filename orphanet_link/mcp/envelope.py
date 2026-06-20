@@ -326,7 +326,7 @@ async def run_mcp_tool(
             _stamp_data_version(meta)
             result["_meta"] = _shape_meta(meta, ctx.response_mode)
             _trim_version(result, ctx)
-            metrics.record(tool_name, elapsed, ok=success)
+            metrics.record(tool_name, elapsed, ok=success, response_mode=ctx.response_mode)
         return result
     except Exception as exc:  # broad catch is the error-boundary contract
         elapsed = int((time.perf_counter() - start) * 1000)
@@ -334,12 +334,14 @@ async def run_mcp_tool(
         envelope["_meta"]["elapsed_ms"] = elapsed
         _stamp_capabilities_version(envelope["_meta"])
         _stamp_data_version(envelope["_meta"])
+        request_id = envelope["_meta"].get("request_id")
         envelope["_meta"] = _shape_meta(envelope["_meta"], ctx.response_mode)
-        metrics.record(tool_name, elapsed, ok=False)
+        metrics.record(tool_name, elapsed, ok=False, response_mode=ctx.response_mode)
         logger.warning(
-            "mcp_tool_error tool=%s code=%s exc=%s",
+            "mcp_tool_error tool=%s code=%s request_id=%s exc=%s",
             tool_name,
             envelope["error_code"],
+            request_id,
             exc.__class__.__name__,
         )
         return envelope
