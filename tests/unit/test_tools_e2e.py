@@ -119,6 +119,19 @@ async def test_get_disease_phenotypes_success(facade: FastMCP) -> None:
     assert "phenotypes" in result
 
 
+async def test_get_disease_phenotypes_unknown_frequency_returns_invalid_input(
+    facade: FastMCP,
+) -> None:
+    # An unrecognised frequency label must surface invalid_input + field +
+    # allowed_values, not a silent count:0 (parity with the malformed-hpo_id path)
+    result = await _call(facade, "get_disease_phenotypes", term=_ORPHA_58, frequency="Frequent")
+    assert result["success"] is False
+    assert result["error_code"] == "invalid_input"
+    assert result.get("field") == "frequency"
+    assert "Frequent (79-30%)" in result.get("allowed_values", [])
+    assert "_meta" in result
+
+
 async def test_get_disease_prevalence_success(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_prevalence", term=_ORPHA_KIF7)
     assert result["success"] is True

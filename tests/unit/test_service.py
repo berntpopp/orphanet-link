@@ -205,6 +205,35 @@ def test_get_disease_phenotypes_returns_list(svc):
     assert result["count"] == len(result["phenotypes"])
 
 
+def test_get_disease_phenotypes_valid_frequency_filters(svc):
+    # a recognised bucket filters to exactly the matching rows (ORPHA:58 has 2)
+    label = "Very frequent (99-80%)"
+    result = svc.get_disease_phenotypes("ORPHA:58", frequency=label)
+    assert result["frequency_filter"] == label
+    assert result["count"] == 2
+    assert all(p["frequency"] == label for p in result["phenotypes"])
+
+
+def test_get_disease_phenotypes_valid_absent_frequency_is_empty(svc):
+    # a recognised bucket with no matching rows is a legitimate empty (NOT an error)
+    result = svc.get_disease_phenotypes(
+        "ORPHA:58", frequency="Frequent (79-30%)", response_mode="standard"
+    )
+    assert result["count"] == 0
+    assert result["phenotypes"] == []
+
+
+def test_get_disease_phenotypes_unknown_frequency_raises(svc):
+    from orphanet_link.exceptions import InvalidInputError
+
+    # the short label "Frequent" is not a valid bucket: must raise invalid_input,
+    # not silently return count:0 (mirrors find_diseases_by_phenotype's id handling)
+    with pytest.raises(InvalidInputError) as exc:
+        svc.get_disease_phenotypes("ORPHA:58", frequency="Frequent")
+    assert exc.value.field == "frequency"
+    assert "Frequent (79-30%)" in (exc.value.allowed or [])
+
+
 # -- get_disease_prevalence ----------------------------------------------------
 
 

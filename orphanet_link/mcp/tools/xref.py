@@ -31,7 +31,9 @@ def register_xref_tools(mcp: FastMCP) -> None:
             "UMLS/GARD/MeSH/MedDRA) back to the Orphanet disorder(s) that map to it. "
             "Returns matches[] plus a pagination block {total, returned, limit, "
             "offset, truncated, next_offset}; when truncated, next_commands carries a "
-            "forward-page step. "
+            "forward-page step. Miss semantics (list-shaped, unlike resolve_disease): "
+            "a malformed CURIE is rejected with invalid_input, while a well-formed but "
+            "unmapped CURIE returns an empty page (total: 0), not not_found. "
             "Signature: resolve_xref(xref_id, limit=, offset=, response_mode=)."
         ),
     )

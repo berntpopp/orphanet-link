@@ -180,6 +180,7 @@ def build_capabilities() -> dict[str, Any]:
         "per_call_meta": [
             "tool",
             "request_id",
+            "source",
             "data_version",
             "elapsed_ms",
             "capabilities_version",
@@ -187,12 +188,13 @@ def build_capabilities() -> dict[str, Any]:
         ],
         "per_call_meta_semantics": (
             "_meta verbosity is tiered by response_mode to control the per-call token "
-            "tax: minimal returns {tool, request_id, data_version}; compact (default) "
-            "adds next_commands (workflow guidance) and capabilities_version (the "
-            "warm-client cache key) but omits elapsed_ms; standard/full add elapsed_ms. "
-            "data_version (a short fingerprint of the loaded Orphanet release) is "
-            "present in EVERY tier so any answer can be tied to its data version; "
-            "every compact or richer response also carries next_commands."
+            "tax: minimal returns {tool, request_id, source, data_version}; compact "
+            "(default) adds next_commands (workflow guidance) and capabilities_version "
+            "(the warm-client cache key) but omits elapsed_ms; standard/full add "
+            "elapsed_ms. source and data_version (a short fingerprint of the loaded "
+            "Orphanet release) are present in EVERY tier so any answer can be tied to "
+            "its backend and data version; every compact or richer response also "
+            "carries next_commands."
         ),
         "capabilities_version_semantics": (
             "_meta.capabilities_version is a content hash of this discovery contract. "
@@ -258,12 +260,18 @@ def build_capabilities() -> dict[str, Any]:
             "many labels/ids -> resolve_disease_batch / get_disease_batch (one round trip)",
         ],
         "not_found_contract": (
-            "An id/label/xref with no term returns error_code 'not_found'. An "
-            "ambiguous label returns 'ambiguous_query' with candidates and "
-            "next_commands to each candidate. Orphanet obsolescence / successor "
-            "links are not currently surfaced by this index (the ingested Orphadata "
-            "products carry no withdrawn/replaced-by data), so every resolvable "
-            "ORPHAcode is treated as active."
+            "Miss semantics depend on tool shape. resolve_disease (single canonical "
+            "result) returns 'not_found' for a label/ORPHAcode with no term, and "
+            "'ambiguous_query' (with candidates + next_commands) for a label matching "
+            "several. The list-shaped lookups -- resolve_xref, find_diseases_by_gene, "
+            "find_diseases_by_phenotype -- instead return a success page with total: 0 "
+            "for a well-formed but absent id (an empty result is a valid answer, not an "
+            "error). A malformed argument (bad CURIE, non-HP HPO id, unknown frequency "
+            "bucket) is rejected up front with 'invalid_input' carrying field + "
+            "allowed_values. Orphanet obsolescence / successor links are not currently "
+            "surfaced by this index (the ingested Orphadata products carry no "
+            "withdrawn/replaced-by data), so every resolvable ORPHAcode is treated as "
+            "active."
         ),
         "error_codes": ERROR_CODES,
         "limits": {

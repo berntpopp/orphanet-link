@@ -86,8 +86,9 @@ def register_association_tools(mcp: FastMCP) -> None:
         frequency: Annotated[
             str | None,
             Field(
-                description="Filter by HPO frequency label (e.g. 'Frequent (79-30%)'). "
-                "Omit to return all.",
+                description="Filter by HPO frequency bucket; must be one of the Orphanet "
+                "frequency labels (e.g. 'Frequent (79-30%)') -- an unrecognised label is "
+                "rejected with invalid_input. Omit to return all.",
                 examples=["Frequent (79-30%)", "Very frequent (99-80%)"],
             ),
         ] = None,

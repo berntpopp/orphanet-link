@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from orphanet_link.constants import HPO_FREQUENCIES
 from orphanet_link.exceptions import DataUnavailableError, InvalidInputError, NotFoundError
 from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, parse_curie
 from orphanet_link.services.compose import compose_sections
@@ -203,7 +204,22 @@ class OrphanetService:
     def get_disease_phenotypes(
         self, term: str, frequency: str | None = None, response_mode: str = DEFAULT_RESPONSE_MODE
     ) -> dict[str, Any]:
-        """Return HPO phenotype annotations for a disorder."""
+        """Return HPO phenotype annotations for a disorder.
+
+        A non-null ``frequency`` is validated against the Orphanet HPO frequency
+        buckets (``HPO_FREQUENCIES``): an unrecognised label raises ``invalid_input``
+        (``field="frequency"``, carrying ``allowed_values``) instead of silently
+        returning ``count: 0``, mirroring ``find_diseases_by_phenotype``'s id
+        handling. A recognised bucket with no matching rows still returns
+        ``count: 0`` (a legitimate empty, not an error).
+        """
+        if frequency is not None and frequency not in HPO_FREQUENCIES:
+            raise InvalidInputError(
+                f"'{frequency}' is not a valid HPO frequency label.",
+                field="frequency",
+                allowed=list(HPO_FREQUENCIES),
+                hint="get_disease_phenotypes(term, frequency=, response_mode=)",
+            )
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         phenotypes = self.repo.get_phenotypes(code, frequency)

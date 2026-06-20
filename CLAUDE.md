@@ -15,7 +15,8 @@ file only highlights the essentials.
   plane (`mcp/`) is domain-agnostic scaffolding where `run_mcp_tool` owns
   `success`/`_meta` and returns structured errors (never raised).
 - **Invariants:** every `compact`+ (default) response carries
-  `_meta.next_commands` (`minimal` opts out → `_meta` = `{tool, request_id}`);
+  `_meta.next_commands` (`minimal` opts out of guidance → `_meta` =
+  `{tool, request_id, source, data_version}`, keeping the citation anchor);
   7-code error taxonomy; each tool has `output_schema` + `READ_ONLY_OPEN_WORLD`
   and a first sentence ending `Signature: tool(args...)`; keep
   `capabilities.TOOLS` in sync; normalise ids in `identifiers.py`; cite the
