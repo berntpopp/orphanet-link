@@ -127,7 +127,9 @@ class OrphanetRepository:
             "FROM disorder_fts f "
             "JOIN disorder d ON d.orpha_code = f.orpha_code "
             f"WHERE disorder_fts MATCH ?{obs_clause} "
-            "ORDER BY score LIMIT ? OFFSET ?"
+            # score (bm25, best-first); CAST tiebreak makes equal-score ties an
+            # ENFORCED contract (ORPHAcode ascending), not an implicit row order.
+            "ORDER BY score, CAST(f.orpha_code AS INTEGER) LIMIT ? OFFSET ?"
         )
         count_sql = (
             "SELECT COUNT(*) AS n "  # noqa: S608

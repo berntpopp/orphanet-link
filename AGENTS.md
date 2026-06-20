@@ -144,6 +144,28 @@ association sections into a single record, collapsing the per-section fan-out
 (~34% fewer tokens than 4 separate calls on the fixture disorder; the saving
 grows with call count). Prefer it over a fan-out when you need the whole entity.
 
+## Determinism & ordering contract
+
+Every list/closure tool returns rows in a **stable, reproducible order**, enforced
+by an explicit SQL `ORDER BY` and locked by regression tests
+(`test_determinism.py` run-to-run equality + cross-page no-overlap;
+`test_boundaries.py` golden forward-walk). The order per surface:
+
+| Surface | Primary sort | Tiebreak |
+|---|---|---|
+| `search_diseases` | FTS `bm25` relevance (best first) | **ORPHAcode ascending** (enforced via `CAST(orpha_code AS INTEGER)`) — equal-score ties are a contract, not row luck |
+| `get_disease_ancestors` / `_descendants` | disorder name (alphabetical) | classification-only nodes have no disorder row (null name) and retain a deterministic build order |
+| `find_diseases_by_gene` / `_by_phenotype`, `resolve_xref` | disorder name | deterministic build order |
+| `get_disease_genes` | `gene_symbol` | — |
+| `get_disease_phenotypes` | `hpo_id` | — |
+| `get_disease_prevalence` | `prevalence_type` | — |
+| `map_cross_ontology` / `xrefs` | mapping-relation rank, then source, then `object_id` | — |
+
+Forward pagination preserves this total order, so a row never appears on two pages
+and none is skipped (the `page_fields` invariant, property-tested in
+`test_pagination_invariants.py`). When changing an `ORDER BY`, update the
+determinism/snapshot tests deliberately.
+
 ## Line budget
 
 Every source file must stay at or below **500 lines**. The budget is enforced by

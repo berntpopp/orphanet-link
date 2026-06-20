@@ -85,8 +85,36 @@ _ERROR_CASES: dict[str, dict[str, Any]] = {
         "kwargs": {"term": "ORPHA:9999999"},
         "error_code": "not_found",
     },
+    "resolve_disease": {
+        "kwargs": {"query": "__no_such_disease_xyz__"},
+        "error_code": "not_found",
+    },
+    "get_disease_genes": {
+        "kwargs": {"term": "ORPHA:9999999"},
+        "error_code": "not_found",
+    },
+    "get_disease_phenotypes": {
+        "kwargs": {"term": "ORPHA:9999999"},
+        "error_code": "not_found",
+    },
+    "get_disease_disability": {
+        "kwargs": {"term": "ORPHA:9999999"},
+        "error_code": "not_found",
+    },
+    "map_cross_ontology": {
+        "kwargs": {"term": "ORPHA:9999999"},
+        "error_code": "not_found",
+    },
+    "get_disease_ancestors": {
+        "kwargs": {"term": "__no_such_disease_xyz__"},
+        "error_code": "not_found",
+    },
     "resolve_xref": {
         "kwargs": {"xref_id": "notacurie"},
+        "error_code": "invalid_input",
+    },
+    "find_diseases_by_gene": {
+        "kwargs": {"gene_symbol": " "},
         "error_code": "invalid_input",
     },
     "find_diseases_by_phenotype": {
@@ -95,6 +123,10 @@ _ERROR_CASES: dict[str, dict[str, Any]] = {
     },
     "get_disease_batch": {
         "kwargs": {"terms": [_ORPHA_58] * 51},
+        "error_code": "invalid_input",
+    },
+    "resolve_disease_batch": {
+        "kwargs": {"queries": []},
         "error_code": "invalid_input",
     },
 }
