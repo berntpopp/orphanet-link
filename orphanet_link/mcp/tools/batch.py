@@ -8,6 +8,7 @@ failing the whole call. A batch-size cap returns a single ``invalid_input`` erro
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
@@ -24,19 +25,52 @@ from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
+logger = logging.getLogger(__name__)
+
 #: Hard cap on items per batch call (bounds token blowup / abuse). Defined in
 #: ``constants`` so capabilities.limits advertises the exact value enforced here.
 MAX_BATCH = MAX_BATCH_ITEMS
 
+#: Max recovery candidates carried on an ambiguous batch item, tiered by verbosity
+#: so a wide minimal batch does not balloon (P2.1 respects response_mode).
+_CANDIDATE_CAP = {"minimal": 1, "compact": 3, "standard": 5, "full": 5}
+
 
 def _require_batch(items: list[str], field: str) -> None:
-    """Validate batch size: non-empty and within ``MAX_BATCH``."""
+    """Validate batch size: non-empty and within ``MAX_BATCH`` (logs an over-cap reject)."""
     if not items:
         raise InvalidInputError(f"{field} must be a non-empty list.", field=field)
     if len(items) > MAX_BATCH:
+        # Reject (never silently truncate) and log the cap so over-fetch is observable.
+        logger.warning(
+            "batch size cap exceeded: %s got %d (max %d); rejecting", field, len(items), MAX_BATCH
+        )
         raise InvalidInputError(
             f"{field} accepts at most {MAX_BATCH} items (got {len(items)}).", field=field
         )
+
+
+def _error_row(
+    exc: Exception, key: str, value: str, index: int, response_mode: str
+) -> dict[str, Any]:
+    """Build a per-item failure row, carrying recoverable candidates when available.
+
+    An ``ambiguous_query`` (or a suggestion-bearing ``not_found``) item is now as
+    self-recoverable as the single-call equivalent: the candidates ride along so the
+    agent picks one without a second round trip (F-01). Count is tiered by mode.
+    """
+    code, message = classify_exception(exc)
+    row: dict[str, Any] = {
+        key: value,
+        "index": index,
+        "ok": False,
+        "error_code": code,
+        "message": message,
+    }
+    candidates = getattr(exc, "candidates", None) or getattr(exc, "suggestions", None)
+    if candidates:
+        row["candidates"] = candidates[: _CANDIDATE_CAP.get(response_mode, 3)]
+    return row
 
 
 def register_batch_tools(mcp: FastMCP) -> None:
@@ -65,17 +99,13 @@ def register_batch_tools(mcp: FastMCP) -> None:
             svc = get_orphanet_service()
             results: list[dict[str, Any]] = []
             version: str | None = None
-            for query in queries:
+            for index, query in enumerate(queries):
                 try:
                     rec = svc.resolve_disease(query, response_mode=response_mode)
-                    item_version = rec.pop("orphanet_version", None)  # grounded once (F4)
-                    version = version or item_version
-                    results.append({**rec, "query": query, "ok": True})
+                    version = rec.pop("orphanet_version", None) or version  # grounded once
+                    results.append({**rec, "query": query, "index": index, "ok": True})
                 except Exception as exc:  # per-item boundary; the call still succeeds
-                    code, message = classify_exception(exc)
-                    results.append(
-                        {"query": query, "ok": False, "error_code": code, "message": message}
-                    )
+                    results.append(_error_row(exc, "query", query, index, response_mode))
             payload: dict[str, Any] = {"count": len(results), "results": results}
             if version:
                 payload["orphanet_version"] = version
@@ -112,17 +142,13 @@ def register_batch_tools(mcp: FastMCP) -> None:
             svc = get_orphanet_service()
             results: list[dict[str, Any]] = []
             version: str | None = None
-            for term in terms:
+            for index, term in enumerate(terms):
                 try:
                     rec = svc.get_disease(term, response_mode=response_mode, fields=fields)
-                    item_version = rec.pop("orphanet_version", None)  # grounded once (F4)
-                    version = version or item_version
-                    results.append({**rec, "term": term, "ok": True})
+                    version = rec.pop("orphanet_version", None) or version  # grounded once
+                    results.append({**rec, "term": term, "index": index, "ok": True})
                 except Exception as exc:  # per-item boundary; the call still succeeds
-                    code, message = classify_exception(exc)
-                    results.append(
-                        {"term": term, "ok": False, "error_code": code, "message": message}
-                    )
+                    results.append(_error_row(exc, "term", term, index, response_mode))
             payload: dict[str, Any] = {"count": len(results), "results": results}
             if version:
                 payload["orphanet_version"] = version

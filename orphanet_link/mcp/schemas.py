@@ -211,12 +211,15 @@ _BATCH_ITEM = {
     "properties": {
         "query": _STR,
         "term": _STR,
+        "index": _INT,
         "ok": _BOOL,
         "orpha_code": _STR_NULL,
         "name": _STR_NULL,
         "match_type": _STR_NULL,
         "error_code": _STR,
         "message": _STR,
+        #: Recovery candidates on an ambiguous (or suggestion-bearing) failed item.
+        "candidates": _ARR,
     },
 }
 

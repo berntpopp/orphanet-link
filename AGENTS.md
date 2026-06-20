@@ -219,6 +219,11 @@ A piece of work is done when ALL of the following are true:
   functional-consequence annotation returns `count: 0` with `coverage: "none"`
   (a valid empty result, never an error); annotated disorders return
   `coverage: "present"`.
+- Batch items each carry a stable `index` (input position). A per-item failure with
+  `ambiguous_query` (or a suggestion-bearing `not_found`) carries `candidates[]` so
+  it is as self-recoverable as the single-call equivalent; candidate count is tiered
+  by `response_mode`. A batch over `MAX_BATCH_ITEMS` is rejected with `invalid_input`
+  (logged), never silently truncated.
 
 ---
 

@@ -189,6 +189,7 @@ async def test_snapshot_resolve_disease_batch(facade: FastMCP) -> None:
             {
                 "ok": True,
                 "query": "ORPHA:58",
+                "index": 0,
                 "orpha_code": "58",
                 "name": _NAME_58,
                 "match_type": "orpha_code",
@@ -196,6 +197,7 @@ async def test_snapshot_resolve_disease_batch(facade: FastMCP) -> None:
             {
                 "ok": True,
                 "query": "ORPHA:166024",
+                "index": 1,
                 "orpha_code": "166024",
                 "name": _NAME_166024,
                 "match_type": "orpha_code",
