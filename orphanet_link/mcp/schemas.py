@@ -134,6 +134,11 @@ DISEASE_SCHEMA = _envelope(
     obsolete=_BOOL,
     match_type=_STR_NULL,
     orphanet_version=_STR_NULL,
+    #: Optional composed sections attached when ``include=`` is passed (P1.1).
+    genes=_ARR,
+    phenotypes=_ARR,
+    prevalence=_ARR,
+    disability=_ARR,
 )
 
 ANCESTORS_SCHEMA = _envelope(

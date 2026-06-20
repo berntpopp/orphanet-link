@@ -49,6 +49,11 @@ class McpErrorContext:
     arguments: dict[str, Any] = field(default_factory=dict)
     #: The caller's verbosity, used to tier _meta (see :func:`_shape_meta`).
     response_mode: str = DEFAULT_RESPONSE_MODE
+    #: When False (default), the verbose body ``orphanet_version`` string is trimmed
+    #: in the lean modes (minimal/compact) because ``_meta.data_version`` already
+    #: grounds the call (P1.2). The discovery tools set this True -- the human-readable
+    #: release string is THEIR product, not redundant per-call provenance.
+    keep_version: bool = False
 
 
 class McpToolError(Exception):
@@ -257,6 +262,18 @@ def _stamp_data_version(meta: dict[str, Any]) -> None:
         meta["data_version"] = fingerprint
 
 
+def _trim_version(result: dict[str, Any], ctx: McpErrorContext) -> None:
+    """Drop the verbose body ``orphanet_version`` string in the lean modes (P1.2).
+
+    ``_meta.data_version`` (a short release-hash) already grounds every call, so the
+    long human-readable release string is redundant per-call weight in
+    minimal/compact and is shipped only in standard/full. The discovery tools opt out
+    (``keep_version``) because that string is their primary payload.
+    """
+    if not ctx.keep_version and ctx.response_mode in ("minimal", "compact"):
+        result.pop("orphanet_version", None)
+
+
 def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     """Tier ``_meta`` verbosity by ``response_mode`` to control the per-call token tax.
 
@@ -308,6 +325,7 @@ async def run_mcp_tool(
             _stamp_capabilities_version(meta)
             _stamp_data_version(meta)
             result["_meta"] = _shape_meta(meta, ctx.response_mode)
+            _trim_version(result, ctx)
             metrics.record(tool_name, elapsed, ok=success)
         return result
     except Exception as exc:  # broad catch is the error-boundary contract

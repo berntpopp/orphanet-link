@@ -52,7 +52,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         return await run_mcp_tool(
             "get_server_capabilities",
             call,
-            context=McpErrorContext("get_server_capabilities"),
+            context=McpErrorContext("get_server_capabilities", keep_version=True),
         )
 
     @mcp.tool(
@@ -85,5 +85,5 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         return await run_mcp_tool(
             "get_diagnostics",
             call,
-            context=McpErrorContext("get_diagnostics"),
+            context=McpErrorContext("get_diagnostics", keep_version=True),
         )

@@ -11,7 +11,13 @@ from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_get_disease, after_resolve_disease, after_search
 from orphanet_link.mcp.schemas import DISEASE_SCHEMA, RESOLVE_DISEASE_SCHEMA, SEARCH_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import FieldsArg, QueryStr, ResponseMode, TermStr
+from orphanet_link.mcp.tools._common import (
+    FieldsArg,
+    IncludeArg,
+    QueryStr,
+    ResponseMode,
+    TermStr,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -106,18 +112,21 @@ def register_disease_tools(mcp: FastMCP) -> None:
             "inheritance, and disorder type. The term accepts an ORPHAcode, a "
             "label/synonym, or an external xref CURIE (resolved first). xrefs are "
             "grouped by source; any nested count is leaf rows, not groups. "
-            "Pass fields=['xrefs.OMIM', ...] for a sparse projection. "
-            "Signature: get_disease(term, response_mode=, fields=)."
+            "Pass fields=['xrefs.OMIM', ...] for a sparse projection, or "
+            "include=['genes','phenotypes','prevalence','disability'] to compose a "
+            "full entity in ONE call. "
+            "Signature: get_disease(term, response_mode=, fields=, include=)."
         ),
     )
     async def get_disease(
         term: TermStr,
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
+        include: IncludeArg = None,
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease(
-                term, response_mode=response_mode, fields=fields
+                term, response_mode=response_mode, fields=fields, include=include
             )
             payload.setdefault("_meta", {})["next_commands"] = after_get_disease(payload)
             return payload

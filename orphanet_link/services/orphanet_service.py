@@ -14,6 +14,7 @@ from typing import Any
 
 from orphanet_link.exceptions import DataUnavailableError, InvalidInputError, NotFoundError
 from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, parse_curie
+from orphanet_link.services.compose import compose_sections
 from orphanet_link.services.pagination import page_fields
 from orphanet_link.services.resolution import resolve
 from orphanet_link.services.shaping import (
@@ -149,8 +150,14 @@ class OrphanetService:
         term: str,
         response_mode: str = DEFAULT_RESPONSE_MODE,
         fields: list[str] | None = None,
+        include: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Return the full disease record."""
+        """Return the full disease record, optionally composing extra sections.
+
+        ``include`` (any of genes/phenotypes/prevalence/disability) attaches those
+        association sections to the single record so a full entity needs one call
+        rather than a per-section fan-out (P1.1). Unknown sections raise invalid_input.
+        """
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         record = self.repo.get_disorder(code)
@@ -171,6 +178,8 @@ class OrphanetService:
             "children": cls.get("children", []),
             "orphanet_version": self._orphanet_version(),
         }
+        if include:
+            payload.update(compose_sections(self.repo, code, include))
         return shape(payload, response_mode, fields=fields)
 
     def get_disease_genes(

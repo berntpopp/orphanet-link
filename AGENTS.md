@@ -121,6 +121,29 @@ rather than a crash.
 
 ---
 
+## Token budget (response_mode × per-call weight)
+
+`response_mode` and the `orphanet_version` policy are the two knobs that set
+per-call token cost. Per-call weight, lightest → heaviest:
+
+| Mode | Body | `_meta` keys | Body `orphanet_version` |
+|---|---|---|---|
+| `minimal` | identity anchors only | `tool, request_id, source, data_version` | dropped |
+| `compact` (default) | null/empty dropped recursively; search hits get a snippet | `+ next_commands, capabilities_version` | dropped (use `_meta.data_version`) |
+| `standard` | full record | `+ elapsed_ms` | present |
+| `full` | full record | `+ elapsed_ms` | present |
+
+The verbose human-readable `orphanet_version` string is shipped only in
+`standard`/`full`; in the lean modes the short `_meta.data_version` hash grounds
+the call (the envelope trims the body string — discovery tools opt out via
+`McpErrorContext(keep_version=True)` because that string is their product).
+
+**Full-entity in one call:** `get_disease(term,
+include=['genes','phenotypes','prevalence','disability'])` composes the
+association sections into a single record, collapsing the per-section fan-out
+(~34% fewer tokens than 4 separate calls on the fixture disorder; the saving
+grows with call count). Prefer it over a fan-out when you need the whole entity.
+
 ## Line budget
 
 Every source file must stay at or below **500 lines**. The budget is enforced by

@@ -236,16 +236,20 @@ async def test_get_disease_batch_success(facade: FastMCP) -> None:
 
 
 async def test_get_disease_batch_grounds_version_once(facade: FastMCP) -> None:
-    # F4: orphanet_version is grounded ONCE at the top level, not echoed per item
+    # The batch is grounded ONCE per call, never per item: in compact (default) the
+    # verbose orphanet_version string is trimmed (P1.2) and _meta.data_version anchors
+    # the whole envelope; no row ever carries its own version.
     result = await _call(facade, "get_disease_batch", terms=[_ORPHA_KIF7, _ORPHA_58])
-    assert result.get("orphanet_version")
+    assert result["_meta"].get("data_version"), "batch must stay grounded via _meta.data_version"
+    assert "orphanet_version" not in result, "compact must trim the verbose version string"
     for row in result["results"]:
         assert "orphanet_version" not in row
 
 
 async def test_resolve_disease_batch_grounds_version_once(facade: FastMCP) -> None:
     result = await _call(facade, "resolve_disease_batch", queries=[_ORPHA_KIF7, _ORPHA_58])
-    assert result.get("orphanet_version")
+    assert result["_meta"].get("data_version"), "batch must stay grounded via _meta.data_version"
+    assert "orphanet_version" not in result
     for row in result["results"]:
         assert "orphanet_version" not in row
 

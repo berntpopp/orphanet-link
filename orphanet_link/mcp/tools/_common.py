@@ -46,3 +46,13 @@ FieldsArg = Annotated[
         examples=[["xrefs.OMIM"], ["definition", "genes"]],
     ),
 ]
+
+IncludeArg = Annotated[
+    list[str] | None,
+    Field(
+        description="Compose extra association sections into the single record "
+        "(any of: genes, phenotypes, prevalence, disability) so a full entity needs "
+        "one call instead of a per-section fan-out. Omit for the base record only.",
+        examples=[["genes", "phenotypes", "prevalence"], ["genes"]],
+    ),
+]
