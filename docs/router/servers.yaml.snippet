@@ -7,6 +7,8 @@
 #   GF_ORPHANET_URL=https://orphanet-link.genefoundry.org/mcp
 #
 # Note: GF_ORPHANET_URL is set on the ROUTER side, not in orphanet-link's .env.
+# The target must be a `--transport unified` deployment; orphanet-link's
+# `--transport http` mode is REST/FastAPI-only and does not expose MCP at /mcp.
 #
 # Fleet compliance:
 # - All 19 tools use unprefixed verb_noun names (resolve_disease, get_disease,

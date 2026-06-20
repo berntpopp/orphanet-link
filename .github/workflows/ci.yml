@@ -17,20 +17,16 @@ jobs:
         uses: ./.github/actions/setup-uv-python
 
       - name: Format check (ruff)
-        run: uv run ruff format --check .
+        run: make format-check
 
       - name: Lint (ruff)
-        run: uv run ruff check .
+        run: make lint-ci
 
       - name: File-size budget
-        run: uv run python scripts/check_file_size.py
+        run: make lint-loc
 
-      # mypy is run with continue-on-error on the first pass because the
-      # project uses strict mode and some stub coverage may be incomplete.
-      # Remove continue-on-error once the type errors are resolved upstream.
       - name: Type-check (mypy)
-        run: uv run mypy orphanet_link
-        continue-on-error: true
+        run: make typecheck
 
       - name: Unit tests (offline, no network)
-        run: uv run pytest -q -m "not integration"
+        run: make test-fast

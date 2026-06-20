@@ -16,8 +16,10 @@ same two-plane architecture and conventions as `mondo-link` and slots into
 `genefoundry-router` under the `orphanet` namespace.
 
 > **Research use only.** This server is not clinical decision support. It is not
-> suitable for diagnosis, treatment, triage, or patient management. Every payload
-> carries an `unsafe_for_clinical_use` signal. See the license section below.
+> suitable for diagnosis, treatment, triage, or patient management. The warning
+> is surfaced through `get_server_capabilities`, `orphanet://research-use`,
+> `orphanet://capabilities`, and this documentation; ordinary tool payloads do
+> not carry a per-call `unsafe_for_clinical_use` field.
 
 ---
 
@@ -135,6 +137,11 @@ uv run python server.py --transport unified --host 127.0.0.1 --port 8000
 
 The MCP endpoint is at `http://127.0.0.1:8000/mcp`.
 
+Router deployments must run `--transport unified` and point the router URL at
+the `/mcp` endpoint. The server's `--transport http` mode is REST/FastAPI-only
+(`/health` and service metadata); it is not MCP-over-HTTP and does not expose
+the MCP endpoint.
+
 ### stdio (for direct MCP client use)
 
 ```bash
@@ -155,6 +162,8 @@ make docker-down
 ---
 
 ## MCP client setup
+
+These HTTP client examples target a server running `--transport unified`.
 
 ### Claude Code (HTTP transport)
 
