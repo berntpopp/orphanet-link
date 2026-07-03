@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from orphanet_link import __version__
 from orphanet_link.mcp.capabilities import register_capability_resources
 from orphanet_link.mcp.middleware import ArgValidationMiddleware
 from orphanet_link.mcp.resources import ORPHANET_SERVER_INSTRUCTIONS
@@ -21,6 +22,7 @@ def create_orphanet_mcp() -> FastMCP:
     """Build a FastMCP instance with all orphanet-link tools, resources, middleware."""
     mcp = FastMCP(
         name="orphanet-link",
+        version=__version__,
         instructions=ORPHANET_SERVER_INSTRUCTIONS,
         mask_error_details=True,
     )
