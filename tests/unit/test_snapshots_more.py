@@ -106,6 +106,7 @@ async def test_snapshot_map_cross_ontology(facade: FastMCP) -> None:
     assert result["_meta"] == {
         "source": "orphanet",
         "tool": "map_cross_ontology",
+        "unsafe_for_clinical_use": True,
         "next_commands": [
             {"tool": "get_disease_ancestors", "arguments": {"term": "166024"}},
             {"tool": "get_disease", "arguments": {"term": "166024"}},

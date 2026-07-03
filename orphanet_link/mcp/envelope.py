@@ -33,10 +33,12 @@ from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE
 
 logger = logging.getLogger(__name__)
 
-# Per-call _meta is kept lean: static provenance (research-use restriction,
-# citation, Mondo release) lives ONLY in get_server_capabilities. Per-call _meta
-# carries only dynamic fields: tool, request_id, [next_commands, capabilities_version,
-# elapsed_ms] -- and those three are tiered by response_mode (see _shape_meta).
+# Per-call _meta is kept lean: static provenance (citation, Orphanet release)
+# lives ONLY in get_server_capabilities. Per-call _meta carries a fixed
+# research-use disclaimer (unsafe_for_clinical_use, present at every response_mode,
+# success and error paths -- fleet disclaimer standardization) plus dynamic
+# fields: tool, request_id, [next_commands, capabilities_version, elapsed_ms] --
+# and those three are tiered by response_mode (see _shape_meta).
 _RETRYABLE = {"rate_limited", "upstream_unavailable", "data_unavailable"}
 
 
@@ -133,7 +135,12 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "message": message,
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
-        "_meta": {"tool": context.tool_name, "request_id": _request_id(), "source": "orphanet"},
+        "_meta": {
+            "tool": context.tool_name,
+            "request_id": _request_id(),
+            "source": "orphanet",
+            "unsafe_for_clinical_use": True,
+        },
     }
     if isinstance(exc, InvalidInputError):
         if exc.field is not None:
@@ -209,6 +216,7 @@ def build_arg_error_envelope(
                 "tool": tool_name,
                 "request_id": _request_id(),
                 "source": "orphanet",
+                "unsafe_for_clinical_use": True,
                 "next_commands": [cmd("get_server_capabilities")],
             },
         }
@@ -233,6 +241,7 @@ def build_arg_error_envelope(
             "tool": tool_name,
             "request_id": _request_id(),
             "source": "orphanet",
+            "unsafe_for_clinical_use": True,
             "next_commands": [cmd("get_server_capabilities")],
         },
     }
@@ -278,9 +287,10 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     """Tier ``_meta`` verbosity by ``response_mode`` to control the per-call token tax.
 
     - ``minimal``: the trace essentials plus the data anchor --
-      ``{tool, request_id, source, data_version}``. The caller opted out of guidance,
-      so ``next_commands`` / ``capabilities_version`` / ``elapsed_ms`` are dropped, but
-      ``data_version`` stays so even the leanest answer is tied to its Orphanet release.
+      ``{tool, request_id, source, unsafe_for_clinical_use, data_version}``. The caller
+      opted out of guidance, so ``next_commands`` / ``capabilities_version`` /
+      ``elapsed_ms`` are dropped, but ``data_version`` stays so even the leanest answer
+      is tied to its Orphanet release.
     - ``compact`` (default): keep ``next_commands`` (workflow guidance) and
       ``capabilities_version`` (the warm-client cache key the discovery contract leans
       on), but drop the ``elapsed_ms`` observability echo from the hot path -- it is
@@ -289,9 +299,17 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
 
     The universal ``next_commands`` invariant therefore holds for ``compact`` and
     richer (every default response still chains); ``minimal`` is the documented opt-out.
+    ``unsafe_for_clinical_use`` is NOT tiered -- it is a fixed research-use disclaimer
+    present at every ``response_mode``, on both the success and error envelopes (fleet
+    disclaimer standardization; see the module docstring).
     """
     if response_mode == "minimal":
-        lean = {"tool": meta["tool"], "request_id": meta["request_id"], "source": "orphanet"}
+        lean = {
+            "tool": meta["tool"],
+            "request_id": meta["request_id"],
+            "source": "orphanet",
+            "unsafe_for_clinical_use": True,
+        }
         if "data_version" in meta:
             lean["data_version"] = meta["data_version"]
         return lean
@@ -320,6 +338,7 @@ async def run_mcp_tool(
                 "tool": tool_name,
                 "request_id": _request_id(),
                 "source": "orphanet",
+                "unsafe_for_clinical_use": True,
                 "elapsed_ms": elapsed,
             }
             _stamp_capabilities_version(meta)
