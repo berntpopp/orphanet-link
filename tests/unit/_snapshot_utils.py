@@ -82,5 +82,15 @@ def _step(tool: str, term: str) -> dict[str, Any]:
 
 
 def _meta(tool: str, steps: list[dict[str, Any]]) -> dict[str, Any]:
-    """The normalized _meta envelope every compact response carries (source + tool + steps)."""
-    return {"source": "orphanet", "tool": tool, "next_commands": steps}
+    """The normalized _meta envelope every compact response carries.
+
+    ``source`` + ``tool`` + ``next_commands`` + the fixed research-use disclaimer
+    ``unsafe_for_clinical_use`` (fleet disclaimer standardization; present at every
+    response_mode, so it survives ``_normalize``'s volatile-key strip).
+    """
+    return {
+        "source": "orphanet",
+        "tool": tool,
+        "unsafe_for_clinical_use": True,
+        "next_commands": steps,
+    }
