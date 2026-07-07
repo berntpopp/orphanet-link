@@ -31,7 +31,7 @@ async def bootstrap_data(config: OrphanetDataConfig, logger: Any) -> None:
 
     try:
         path = await asyncio.to_thread(ensure_database, config)
-        logger.info("orphanet_data_ready", db_path=str(path))
+        logger.info("orphanet_data_ready", db_file=path.name)
     except (DataUnavailableError, DownloadError, OSError) as exc:
         logger.warning("orphanet_data_bootstrap_failed", error=str(exc))
 
@@ -46,7 +46,7 @@ async def _refresh_loop(config: OrphanetDataConfig, logger: Any) -> None:
         await asyncio.sleep(interval + jitter)
         try:
             path = await asyncio.to_thread(ensure_database, config)
-            logger.debug("orphanet_data_refresh_checked", db_path=str(path))
+            logger.debug("orphanet_data_refresh_checked", db_file=path.name)
         except (DataUnavailableError, DownloadError, OSError) as exc:
             logger.warning("orphanet_data_refresh_failed", error=str(exc))
 

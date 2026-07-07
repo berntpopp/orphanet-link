@@ -38,3 +38,21 @@ def test_health_version_matches_package() -> None:
     resp = TestClient(create_app()).get("/health")
     assert resp.status_code == 200
     assert resp.json()["version"] == version(DIST)
+
+
+def test_git_sha_never_surfaces_literal_unknown(monkeypatch) -> None:
+    # The Docker build injects ORPHANET_LINK_GIT_SHA=unknown when no sha
+    # build-arg is passed; that sentinel must be normalized to None, never
+    # surfaced on /health or in diagnostics as the literal string "unknown".
+    import orphanet_link.buildinfo as bi
+
+    monkeypatch.setenv("ORPHANET_LINK_GIT_SHA", "unknown")
+    monkeypatch.setattr(bi, "_git_sha_from_dotgit", lambda: None)
+    assert bi.build_info()["git_sha"] is None
+
+
+def test_git_sha_env_value_is_used_when_present(monkeypatch) -> None:
+    import orphanet_link.buildinfo as bi
+
+    monkeypatch.setenv("ORPHANET_LINK_GIT_SHA", "abc123def456")
+    assert bi.build_info()["git_sha"] == "abc123def456"

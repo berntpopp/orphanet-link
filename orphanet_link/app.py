@@ -48,10 +48,21 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # This backend holds no cookies/session/auth, so CORS credentials are
+    # meaningless and a footgun: `allow_credentials=True` combined with a
+    # wildcard origin would be a CSRF/credential-leak vector. Keep credentials
+    # off and fail closed if a wildcard origin is ever paired with credentials.
+    allow_credentials = False
+    origins = settings.cors_origins
+    if allow_credentials and "*" in origins:
+        raise RuntimeError(
+            "Insecure CORS: allow_credentials=True cannot be combined with a "
+            "wildcard '*' origin on an unauthenticated backend."
+        )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=allow_credentials,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )

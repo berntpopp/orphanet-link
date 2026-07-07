@@ -49,9 +49,18 @@ def _built_at_fallback() -> str | None:
 
 
 def build_info() -> dict[str, str | None]:
-    """Return version + git sha + build time (env-injected, else resolved locally)."""
+    """Return version + git sha + build time (env-injected, else resolved locally).
+
+    The Docker build defaults the ``ORPHANET_LINK_GIT_SHA`` arg/env to the
+    literal ``"unknown"`` when no sha is passed; treat that sentinel as
+    unresolved so ``/health`` and diagnostics report ``None`` instead of a
+    misleading placeholder.
+    """
+    env_sha = os.environ.get("ORPHANET_LINK_GIT_SHA") or ""
+    if env_sha == "unknown":
+        env_sha = ""
     return {
         "version": __version__,
-        "git_sha": os.environ.get("ORPHANET_LINK_GIT_SHA") or _git_sha_from_dotgit() or "unknown",
+        "git_sha": env_sha or _git_sha_from_dotgit(),
         "built_at": os.environ.get("ORPHANET_LINK_BUILT_AT") or _built_at_fallback(),
     }
