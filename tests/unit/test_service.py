@@ -164,6 +164,16 @@ def test_get_diagnostics_no_repo():
     assert diag["index_built"] is False
 
 
+def test_get_diagnostics_db_path_is_redacted_to_basename(svc):
+    # get_diagnostics is exposed to callers via the router; it must not leak the
+    # absolute host filesystem path. Only the DB filename (basename) may appear.
+    diag = svc.get_diagnostics()
+    db_path = diag["db_path"]
+    assert db_path is not None
+    assert "/" not in db_path and "\\" not in db_path, f"diagnostics leaks a host path: {db_path!r}"
+    assert db_path == Path(db_path).name
+
+
 # -- search_diseases -----------------------------------------------------------
 
 

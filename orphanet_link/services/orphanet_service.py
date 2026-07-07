@@ -87,7 +87,8 @@ class OrphanetService:
             meta = repo.get_meta()
             return {
                 "index_built": True,
-                "db_path": str(repo._path),
+                # Basename only — never leak the absolute host path to callers.
+                "db_path": repo._path.name,
                 "orphanet_version": self._meta(meta, "orphanet_version"),
                 "orphanet_date": self._meta(meta, "orphanet_date"),
                 "schema_version": self._meta(meta, "schema_version"),
@@ -97,7 +98,7 @@ class OrphanetService:
         except DataUnavailableError as exc:
             return {
                 "index_built": False,
-                "db_path": str(self._db_path) if self._db_path else None,
+                "db_path": self._db_path.name if self._db_path else None,
                 "message": str(exc),
             }
 

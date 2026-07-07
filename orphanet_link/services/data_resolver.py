@@ -167,7 +167,7 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)
         raise
-    logger.info("fetch_prebuilt wrote db db_path=%s", db_path)
+    logger.info("fetch_prebuilt wrote db db_file=%s", db_path.name)
 
     _check_schema(db_path)
     return db_path
@@ -221,7 +221,7 @@ def local_build(config: OrphanetDataConfig) -> Path:
             paths[key] = path
 
     db_path = build_database(config, paths, classification_paths)
-    logger.info("local_build complete db_path=%s", db_path)
+    logger.info("local_build complete db_file=%s", db_path.name)
     return db_path
 
 
@@ -252,7 +252,7 @@ def ensure_database(config: OrphanetDataConfig) -> Path:
         DataUnavailableError | DownloadError | BuildError: if all paths fail.
     """
     if _db_is_valid(config):
-        logger.debug("ensure_database db already valid path=%s", config.db_path)
+        logger.debug("ensure_database db already valid db_file=%s", config.db_path.name)
         return config.db_path
 
     if config.prefer_prebuilt:
