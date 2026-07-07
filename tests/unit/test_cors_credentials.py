@@ -9,7 +9,7 @@ Research use only; not clinical decision support."""
 from __future__ import annotations
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from orphanet_link.app import create_app
 
@@ -36,7 +36,13 @@ def test_cors_preserves_method_list() -> None:
     assert set(opts["allow_methods"]) >= {"GET", "POST", "OPTIONS"}
 
 
-def test_health_still_reachable() -> None:
-    resp = TestClient(create_app()).get("/health")
+async def test_health_still_reachable() -> None:
+    # Use the repo's AsyncClient/ASGITransport pattern (see
+    # tests/conformance/test_health_transport.py): the deprecated
+    # httpx-backed TestClient can stall under the installed Starlette/httpx
+    # stack, so drive the app in-process over ASGI instead.
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
