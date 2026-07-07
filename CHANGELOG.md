@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-07
+
+### Security
+
+- Base `docker/docker-compose.yml` now loopback-binds the published host port
+  (`127.0.0.1:...`) so copying the dev/local compose to a server never
+  publishes the unauthenticated backend on the public IP (Docker otherwise
+  binds `0.0.0.0` and bypasses the host firewall). Production still fronts the
+  container with the reverse proxy via the prod/npm overlays.
+- CORS credentials are now disabled (`allow_credentials=False`) on this
+  unauthenticated backend, which holds no cookies/session/auth; the app also
+  fails closed if a wildcard origin is ever paired with credentials.
+- `get_diagnostics` and the bootstrap/refresh/resolver log lines no longer emit
+  the absolute host filesystem path of the SQLite index (an info leak reachable
+  by callers through the router); only the DB basename is reported.
+
+### Fixed
+
+- `build_info()` normalizes the Docker `ORPHANET_LINK_GIT_SHA=unknown` sentinel
+  to `None`, so `/health`, `serverInfo` build info, and discovery no longer
+  surface the misleading literal `"unknown"` git sha.
+
 ### Added
 
 - MCP `_meta` now stamps `unsafe_for_clinical_use: True` on every tool response
