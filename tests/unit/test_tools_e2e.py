@@ -65,6 +65,15 @@ async def test_resolve_disease_by_orpha_code(facade: FastMCP) -> None:
     assert result["_meta"]["next_commands"][0]["tool"] == "get_disease"
 
 
+async def test_unknown_argument_did_you_mean(facade: FastMCP) -> None:
+    result = await facade.call_tool("resolve_disease", {"querie": _ORPHA_58})
+    payload = result.structured_content
+    assert isinstance(payload, dict)
+    assert payload["success"] is False
+    assert payload["error_code"] == "invalid_input"
+    assert "query" in payload["allowed_values"]
+
+
 async def test_resolve_disease_meta_source(facade: FastMCP) -> None:
     """_meta must be present, carry tool name, and have source == 'orphanet'."""
     result = await _call(facade, "resolve_disease", query=_ORPHA_58)
