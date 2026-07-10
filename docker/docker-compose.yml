@@ -29,6 +29,7 @@ services:
       ORPHANET_LINK_PORT: 8000
       ORPHANET_LINK_TRANSPORT: unified
       ORPHANET_LINK_MCP_PATH: /mcp
+      ORPHANET_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1"]'
       ORPHANET_LINK_LOG_LEVEL: INFO
       ORPHANET_LINK_LOG_FORMAT: json
       ORPHANET_LINK_DATA__DATA_DIR: /app/data
@@ -44,7 +45,7 @@ services:
       # Persist the SQLite database across container restarts.
       - orphanet-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

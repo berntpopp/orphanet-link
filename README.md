@@ -137,6 +137,12 @@ uv run python server.py --transport unified --host 127.0.0.1 --port 8000
 
 The MCP endpoint is at `http://127.0.0.1:8000/mcp`.
 
+HTTP deployments enforce exact Host and Origin allowlists. Add the public proxy
+hostname to `ORPHANET_LINK_ALLOWED_HOSTS`. Browser deployments must list an
+origin in both `ORPHANET_LINK_ALLOWED_ORIGINS` and
+`ORPHANET_LINK_CORS_ORIGINS`; request validation and CORS headers are separate
+policies and neither widens the other.
+
 Router deployments must run `--transport unified` and point the router URL at
 the `/mcp` endpoint. The server's `--transport http` mode is REST/FastAPI-only
 (`/health` and service metadata); it is not MCP-over-HTTP and does not expose
