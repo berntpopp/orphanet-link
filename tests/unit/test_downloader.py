@@ -57,6 +57,24 @@ def test_download_file_200_stores_file(config: OrphanetDataConfig) -> None:
 
 
 @respx.mock
+def test_download_file_overflow_preserves_existing_file(
+    config: OrphanetDataConfig,
+) -> None:
+    config.max_source_bytes = 8
+    filename = "en_product1.xml"
+    destination = config.data_dir / filename
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(b"old")
+    respx.get(_url(config, filename)).mock(return_value=httpx.Response(200, content=b"123456789"))
+
+    with pytest.raises(DownloadError, match="exceeded 8"):
+        download_file(config, "product1", filename, force=True)
+
+    assert destination.read_bytes() == b"old"
+    assert list(config.data_dir.glob("*.download.tmp")) == []
+
+
+@respx.mock
 def test_download_file_304_reuses_cached(config: OrphanetDataConfig) -> None:
     filename = "en_product1.xml"
     url = _url(config, filename)

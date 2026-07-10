@@ -49,6 +49,35 @@ class OrphanetDataConfig(BaseModel):
         le=1800,
         description="HTTP timeout (seconds) for downloading an Orphadata file.",
     )
+    max_source_bytes: int = Field(
+        default=1024 * 1024 * 1024,
+        gt=0,
+        description="Maximum compressed or raw size of one Orphadata source file.",
+    )
+    max_bundle_bytes: int = Field(
+        default=256 * 1024 * 1024,
+        gt=0,
+        description="Maximum compressed size of a prebuilt database artifact.",
+    )
+    max_database_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        gt=0,
+        description="Maximum expanded size of a prebuilt SQLite database.",
+    )
+    max_metadata_bytes: int = Field(
+        default=64 * 1024,
+        gt=0,
+        description="Maximum size of release metadata or checksum sidecars.",
+    )
+    max_download_seconds: int = Field(
+        default=1800,
+        gt=0,
+        description="Maximum elapsed time for streaming one download.",
+    )
+    allowed_source_redirect_hosts: list[str] = Field(
+        default_factory=list,
+        description="Additional exact hosts allowed for Orphadata redirects.",
+    )
     user_agent: str = Field(
         default=f"orphanet-link/{__version__} (+https://github.com/berntpopp/orphanet-link)",
         description="User-Agent sent to Orphadata / GitHub.",

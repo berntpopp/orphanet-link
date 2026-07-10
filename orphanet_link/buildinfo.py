@@ -22,14 +22,28 @@ def _git_sha_from_dotgit() -> str | None:
     if not git.exists():
         return None
     try:
-        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        git_dir = git
+        if git.is_file():
+            pointer = git.read_text(encoding="utf-8").strip()
+            if not pointer.startswith("gitdir:"):
+                return None
+            git_dir = Path(pointer.removeprefix("gitdir:").strip())
+            if not git_dir.is_absolute():
+                git_dir = (root / git_dir).resolve()
+        common_dir = git_dir
+        commondir = git_dir / "commondir"
+        if commondir.exists():
+            common_dir = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve()
+
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
         if not head.startswith("ref:"):
             return head[:12]  # detached HEAD: raw sha
         ref = head[4:].strip()
-        loose = git / ref
-        if loose.exists():
-            return loose.read_text(encoding="utf-8").strip()[:12]
-        packed = git / "packed-refs"
+        for directory in (git_dir, common_dir):
+            loose = directory / ref
+            if loose.exists():
+                return loose.read_text(encoding="utf-8").strip()[:12]
+        packed = common_dir / "packed-refs"
         if packed.exists():
             for line in packed.read_text(encoding="utf-8").splitlines():
                 if line and not line.startswith(("#", "^")) and line.endswith(ref):

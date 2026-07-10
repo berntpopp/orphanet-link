@@ -15,6 +15,7 @@ from orphanet_link.config import OrphanetDataConfig
 from orphanet_link.constants import SCHEMA_VERSION
 from orphanet_link.exceptions import DataUnavailableError
 from orphanet_link.services.data_resolver import (
+    _check_schema,
     ensure_database,
     fetch_prebuilt,
 )
@@ -25,8 +26,8 @@ from orphanet_link.services.data_resolver import (
 
 _REPO = "berntpopp/orphanet-link"
 _GH_LATEST = f"https://api.github.com/repos/{_REPO}/releases/latest"
-_GZ_URL = "https://example.com/orphanet.sqlite.gz"
-_SHA_URL = "https://example.com/orphanet.sqlite.gz.sha256"
+_GZ_URL = f"https://github.com/{_REPO}/releases/download/data-1/orphanet.sqlite.gz"
+_SHA_URL = f"{_GZ_URL}.sha256"
 
 
 def _make_tiny_db(tmp_path: Path, *, schema_version: int = SCHEMA_VERSION) -> Path:
@@ -118,6 +119,46 @@ def test_fetch_prebuilt_downloads_and_verifies(config: OrphanetDataConfig, tmp_p
     assert row[0] == SCHEMA_VERSION
 
 
+@respx.mock
+def test_fetch_prebuilt_follows_approved_asset_redirects(
+    config: OrphanetDataConfig, tmp_path: Path
+) -> None:
+    tiny_db = _make_tiny_db(tmp_path)
+    gz_bytes, sha_hex = _gz_and_sha(tiny_db)
+    gz_cdn = "https://release-assets.githubusercontent.com/assets/orphanet.sqlite.gz"
+    sha_cdn = f"{gz_cdn}.sha256"
+    respx.get(_GH_LATEST).mock(
+        return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
+    )
+    respx.get(_GZ_URL).mock(return_value=httpx.Response(302, headers={"Location": gz_cdn}))
+    respx.get(gz_cdn).mock(return_value=httpx.Response(200, content=gz_bytes))
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(302, headers={"Location": sha_cdn}))
+    respx.get(sha_cdn).mock(return_value=httpx.Response(200, content=sha_hex.encode()))
+
+    assert fetch_prebuilt(config) == config.db_path
+
+
+def test_check_schema_closes_connection_after_database_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class BrokenConnection:
+        closed = False
+
+        def execute(self, statement: str) -> None:
+            raise sqlite3.DatabaseError("broken")
+
+        def close(self) -> None:
+            self.closed = True
+
+    connection = BrokenConnection()
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: connection)
+
+    with pytest.raises(DataUnavailableError, match="Cannot read meta table"):
+        _check_schema(tmp_path / "broken.sqlite")
+
+    assert connection.closed
+
+
 # ---------------------------------------------------------------------------
 # fetch_prebuilt — sha256 mismatch
 # ---------------------------------------------------------------------------
@@ -140,6 +181,45 @@ def test_fetch_prebuilt_sha256_mismatch_raises(config: OrphanetDataConfig, tmp_p
         fetch_prebuilt(config)
 
 
+@respx.mock
+def test_fetch_prebuilt_rejects_unapproved_asset_redirect(
+    config: OrphanetDataConfig,
+) -> None:
+    blocked_url = "https://evil.invalid/orphanet.sqlite.gz"
+    respx.get(_GH_LATEST).mock(
+        return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
+    )
+    respx.get(_GZ_URL).mock(return_value=httpx.Response(302, headers={"Location": blocked_url}))
+    blocked = respx.get(blocked_url).mock(return_value=httpx.Response(200, content=b"blocked"))
+
+    with pytest.raises(DataUnavailableError, match="not allowed"):
+        fetch_prebuilt(config)
+
+    assert not blocked.called
+
+
+@respx.mock
+def test_fetch_prebuilt_expansion_limit_preserves_existing_database(
+    config: OrphanetDataConfig, tmp_path: Path
+) -> None:
+    old_db = _make_tiny_db(tmp_path / "old")
+    config.db_path.write_bytes(old_db.read_bytes())
+    old_bytes = config.db_path.read_bytes()
+    config.max_database_bytes = 8
+    gz_bytes = gzip.compress(b"123456789")
+    sha_hex = hashlib.sha256(gz_bytes).hexdigest()
+    respx.get(_GH_LATEST).mock(
+        return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
+    )
+    respx.get(_GZ_URL).mock(return_value=httpx.Response(200, content=gz_bytes))
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(200, content=sha_hex.encode()))
+
+    with pytest.raises(DataUnavailableError, match="exceeded 8"):
+        fetch_prebuilt(config)
+
+    assert config.db_path.read_bytes() == old_bytes
+
+
 # ---------------------------------------------------------------------------
 # fetch_prebuilt — schema_version mismatch
 # ---------------------------------------------------------------------------
@@ -153,6 +233,9 @@ def test_fetch_prebuilt_schema_version_mismatch_raises(
     wrong_version = SCHEMA_VERSION + 99
     tiny_db = _make_tiny_db(tmp_path, schema_version=wrong_version)
     gz_bytes, sha_hex = _gz_and_sha(tiny_db)
+    old_db = _make_tiny_db(tmp_path / "old")
+    config.db_path.write_bytes(old_db.read_bytes())
+    old_bytes = config.db_path.read_bytes()
 
     respx.get(_GH_LATEST).mock(
         return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
@@ -162,6 +245,8 @@ def test_fetch_prebuilt_schema_version_mismatch_raises(
 
     with pytest.raises(DataUnavailableError, match="Schema version mismatch"):
         fetch_prebuilt(config)
+
+    assert config.db_path.read_bytes() == old_bytes
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,11 @@ from typing import TYPE_CHECKING
 import httpx
 
 from orphanet_link.exceptions import DownloadError
+from orphanet_link.ingest.download_security import (
+    DownloadPolicy,
+    open_validated_stream,
+    stream_atomic,
+)
 
 if TYPE_CHECKING:
     from orphanet_link.config import OrphanetDataConfig
@@ -25,7 +30,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CACHE_FILENAME = "download_cache.json"
-_CHUNK_SIZE = 1 << 16  # 64 KiB
 
 
 @dataclass
@@ -106,12 +110,6 @@ def _int_or_none(value: str | None) -> int | None:
         return None
 
 
-def _stream_to_file(response: httpx.Response, dest: Path) -> None:
-    with dest.open("wb") as handle:
-        for chunk in response.iter_bytes(_CHUNK_SIZE):
-            handle.write(chunk)
-
-
 def _build_url(config: OrphanetDataConfig, filename: str) -> str:
     """Resolve ``filename`` against ``config.base_url`` (which always ends in ``/``)."""
     return config.base_url + filename
@@ -147,6 +145,14 @@ def download_file(
     url = _build_url(config, filename)
     dest = config.data_dir / filename
     headers: dict[str, str] = {"User-Agent": config.user_agent}
+    base_host = httpx.URL(config.base_url).host
+    policy = DownloadPolicy(
+        allowed_hosts=frozenset(
+            {base_host.lower(), *(host.lower() for host in config.allowed_source_redirect_hosts)}
+        ),
+        max_bytes=config.max_source_bytes,
+        max_seconds=config.max_download_seconds,
+    )
 
     if not force:
         cached = _read_cache(config).get(url, {})
@@ -157,8 +163,8 @@ def download_file(
 
     try:
         with (
-            httpx.Client(follow_redirects=True, timeout=config.download_timeout) as client,
-            client.stream("GET", url, headers=headers) as response,
+            httpx.Client(follow_redirects=False, timeout=config.download_timeout) as client,
+            open_validated_stream(client, url, headers=headers, policy=policy) as response,
         ):
             if response.status_code == httpx.codes.NOT_MODIFIED:
                 logger.debug("not_modified key=%s url=%s", key, url)
@@ -173,7 +179,12 @@ def download_file(
             etag = response.headers.get("ETag")
             last_modified = response.headers.get("Last-Modified")
             content_length = _int_or_none(response.headers.get("Content-Length"))
-            _stream_to_file(response, dest)
+            stream_atomic(
+                response,
+                dest,
+                max_bytes=policy.max_bytes,
+                max_seconds=policy.max_seconds,
+            )
     except httpx.HTTPStatusError as exc:
         raise DownloadError(f"GET {url} failed: {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
