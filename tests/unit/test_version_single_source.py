@@ -56,3 +56,22 @@ def test_git_sha_env_value_is_used_when_present(monkeypatch) -> None:
 
     monkeypatch.setenv("ORPHANET_LINK_GIT_SHA", "abc123def456")
     assert bi.build_info()["git_sha"] == "abc123def456"
+
+
+def test_git_sha_resolves_from_worktree_pointer(tmp_path: Path, monkeypatch) -> None:
+    import orphanet_link.buildinfo as bi
+
+    package_dir = tmp_path / "checkout" / "orphanet_link"
+    package_dir.mkdir(parents=True)
+    git_dir = tmp_path / "repo" / ".git" / "worktrees" / "checkout"
+    git_dir.mkdir(parents=True)
+    common_dir = tmp_path / "repo" / ".git"
+    ref = common_dir / "refs" / "heads" / "feature"
+    ref.parent.mkdir(parents=True)
+    ref.write_text("abc123def456789\n", encoding="utf-8")
+    (git_dir / "HEAD").write_text("ref: refs/heads/feature\n", encoding="utf-8")
+    (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+    (tmp_path / "checkout" / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+    monkeypatch.setattr(bi, "__file__", str(package_dir / "buildinfo.py"))
+
+    assert bi._git_sha_from_dotgit() == "abc123def456"
