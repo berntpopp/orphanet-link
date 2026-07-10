@@ -9,20 +9,28 @@ Three public entry points:
 
 from __future__ import annotations
 
-import contextlib
 import gzip
 import hashlib
+import json
 import logging
 import os
+import re
 import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, BinaryIO, cast
 
 import httpx
 
 from orphanet_link.constants import SCHEMA_VERSION
-from orphanet_link.exceptions import DataUnavailableError
+from orphanet_link.exceptions import DataUnavailableError, DownloadError
+from orphanet_link.ingest.download_security import (
+    DownloadPolicy,
+    copy_bounded,
+    open_validated_stream,
+    stream_atomic,
+)
 
 if TYPE_CHECKING:
     from orphanet_link.config import OrphanetDataConfig
@@ -36,6 +44,8 @@ logger = logging.getLogger(__name__)
 _GH_API = "https://api.github.com"
 _ASSET_GZ = "orphanet.sqlite.gz"
 _ASSET_SHA = "orphanet.sqlite.gz.sha256"
+_ASSET_HOSTS = frozenset({"github.com", "release-assets.githubusercontent.com"})
+_SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
 
 
 def _release_url(config: OrphanetDataConfig) -> str:
@@ -55,32 +65,108 @@ def _find_asset(assets: list[dict[str, Any]], name: str) -> str:
     raise DataUnavailableError(f"Release asset '{name}' not found in GitHub Release.")
 
 
-def _sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+def _read_bounded(response: httpx.Response, *, max_bytes: int) -> bytes:
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            if int(content_length) > max_bytes:
+                raise DownloadError(f"download exceeded {max_bytes} bytes")
+        except ValueError:
+            pass
+    data = bytearray()
+    for chunk in response.iter_bytes(min(1 << 16, max_bytes + 1)):
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise DownloadError(f"download exceeded {max_bytes} bytes")
+    return bytes(data)
 
 
-def _download_bytes(url: str, config: OrphanetDataConfig) -> bytes:
-    headers = {"User-Agent": config.user_agent, "Accept": "application/octet-stream"}
+def _fetch_release(config: OrphanetDataConfig, release_url: str) -> dict[str, Any]:
+    headers = {"User-Agent": config.user_agent, "Accept": "application/vnd.github+json"}
     try:
-        with httpx.Client(
-            follow_redirects=True,
-            timeout=config.download_timeout,
-        ) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
-            return resp.content
+        with (
+            httpx.Client(follow_redirects=False, timeout=config.download_timeout) as client,
+            client.stream("GET", release_url, headers=headers) as response,
+        ):
+            response.raise_for_status()
+            release = json.loads(
+                _read_bounded(response, max_bytes=config.max_metadata_bytes).decode("utf-8")
+            )
+    except httpx.HTTPStatusError as exc:
+        raise DataUnavailableError(
+            f"GitHub Releases API returned HTTP {exc.response.status_code}: {release_url}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise DataUnavailableError(f"Network error fetching release metadata: {exc}") from exc
+    except (DownloadError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DataUnavailableError(f"Invalid GitHub release metadata: {exc}") from exc
+    if not isinstance(release, dict):
+        raise DataUnavailableError("Invalid GitHub release metadata: expected an object.")
+    return release
+
+
+def _asset_policy(config: OrphanetDataConfig, *, max_bytes: int) -> DownloadPolicy:
+    return DownloadPolicy(
+        allowed_hosts=_ASSET_HOSTS,
+        max_bytes=max_bytes,
+        max_seconds=config.max_download_seconds,
+    )
+
+
+def _download_asset(
+    url: str,
+    destination: Path,
+    config: OrphanetDataConfig,
+    *,
+    max_bytes: int,
+    hasher: Any | None = None,
+) -> None:
+    headers = {"User-Agent": config.user_agent, "Accept": "application/octet-stream"}
+    policy = _asset_policy(config, max_bytes=max_bytes)
+    try:
+        with (
+            httpx.Client(follow_redirects=False, timeout=config.download_timeout) as client,
+            open_validated_stream(client, url, headers=headers, policy=policy) as response,
+        ):
+            response.raise_for_status()
+            stream_atomic(
+                response,
+                destination,
+                max_bytes=policy.max_bytes,
+                hasher=hasher,
+                max_seconds=policy.max_seconds,
+            )
     except httpx.HTTPStatusError as exc:
         raise DataUnavailableError(f"HTTP {exc.response.status_code} fetching {url}") from exc
     except httpx.HTTPError as exc:
         raise DataUnavailableError(f"Network error fetching {url}: {exc}") from exc
+    except DownloadError as exc:
+        raise DataUnavailableError(str(exc)) from exc
+
+
+def _download_sidecar(url: str, config: OrphanetDataConfig) -> bytes:
+    headers = {"User-Agent": config.user_agent, "Accept": "application/octet-stream"}
+    policy = _asset_policy(config, max_bytes=config.max_metadata_bytes)
+    try:
+        with (
+            httpx.Client(follow_redirects=False, timeout=config.download_timeout) as client,
+            open_validated_stream(client, url, headers=headers, policy=policy) as response,
+        ):
+            response.raise_for_status()
+            return _read_bounded(response, max_bytes=config.max_metadata_bytes)
+    except httpx.HTTPStatusError as exc:
+        raise DataUnavailableError(f"HTTP {exc.response.status_code} fetching {url}") from exc
+    except httpx.HTTPError as exc:
+        raise DataUnavailableError(f"Network error fetching {url}: {exc}") from exc
+    except DownloadError as exc:
+        raise DataUnavailableError(str(exc)) from exc
 
 
 def _check_schema(db_path: Path) -> None:
     """Raise DataUnavailableError if meta.schema_version != SCHEMA_VERSION."""
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        row = conn.execute("SELECT schema_version FROM meta WHERE id=1").fetchone()
-        conn.close()
+        with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+            row = conn.execute("SELECT schema_version FROM meta WHERE id=1").fetchone()
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
         raise DataUnavailableError(f"Cannot read meta table from {db_path}: {exc}") from exc
     if row is None:
@@ -116,60 +202,65 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
     release_url = _release_url(config)
     logger.debug("fetch_prebuilt release_url=%s", release_url)
 
-    headers = {
-        "User-Agent": config.user_agent,
-        "Accept": "application/vnd.github+json",
-    }
-    try:
-        with httpx.Client(
-            follow_redirects=True,
-            timeout=config.download_timeout,
-        ) as client:
-            resp = client.get(release_url, headers=headers)
-            resp.raise_for_status()
-            release = resp.json()
-    except httpx.HTTPStatusError as exc:
-        raise DataUnavailableError(
-            f"GitHub Releases API returned HTTP {exc.response.status_code}: {release_url}"
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise DataUnavailableError(f"Network error fetching release metadata: {exc}") from exc
+    release = _fetch_release(config, release_url)
 
     assets: list[dict[str, Any]] = release.get("assets", [])
     gz_url = _find_asset(assets, _ASSET_GZ)
     sha_url = _find_asset(assets, _ASSET_SHA)
 
-    logger.info("fetch_prebuilt downloading gz asset url=%s", gz_url)
-    gz_bytes = _download_bytes(gz_url, config)
-
-    logger.debug("fetch_prebuilt downloading sha256 asset url=%s", sha_url)
-    sha_bytes = _download_bytes(sha_url, config)
-
-    # The sha256 file may be "hexdigest  filename\n" or just "hexdigest\n".
-    expected_hex = sha_bytes.decode("utf-8").split()[0].strip()
-    actual_hex = _sha256_hex(gz_bytes)
-    if actual_hex != expected_hex:
-        raise DataUnavailableError(f"SHA-256 mismatch: expected {expected_hex}, got {actual_hex}.")
-
     config.data_dir.mkdir(parents=True, exist_ok=True)
     db_path = config.db_path
+    gz_fd, gz_name = tempfile.mkstemp(dir=config.data_dir, suffix=".gz.tmp")
+    os.close(gz_fd)
+    gz_path = Path(gz_name)
+    db_fd, db_name = tempfile.mkstemp(dir=config.data_dir, suffix=".sqlite.tmp")
+    os.close(db_fd)
+    db_path_tmp = Path(db_name)
+    digest = hashlib.sha256()
     try:
-        db_bytes = gzip.decompress(gz_bytes)
-    except OSError as exc:
-        raise DataUnavailableError(f"Failed to decompress prebuilt DB: {exc}") from exc
-
-    fd, tmp_path = tempfile.mkstemp(dir=config.data_dir, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(db_bytes)
-        os.replace(tmp_path, db_path)
-    except Exception:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_path)
-        raise
+        logger.info("fetch_prebuilt downloading gz asset url=%s", gz_url)
+        _download_asset(
+            gz_url,
+            gz_path,
+            config,
+            max_bytes=config.max_bundle_bytes,
+            hasher=digest,
+        )
+        logger.debug("fetch_prebuilt downloading sha256 asset url=%s", sha_url)
+        sha_bytes = _download_sidecar(sha_url, config)
+        # The sidecar may be "hexdigest  filename\n" or just "hexdigest\n".
+        try:
+            expected_hex = sha_bytes.decode("ascii").split()[0]
+        except (UnicodeDecodeError, IndexError) as exc:
+            raise DataUnavailableError("Invalid SHA-256 sidecar.") from exc
+        if _SHA256_RE.fullmatch(expected_hex) is None:
+            raise DataUnavailableError(
+                "Invalid SHA-256 sidecar: expected exactly 64 hex characters."
+            )
+        actual_hex = digest.hexdigest()
+        if actual_hex.lower() != expected_hex.lower():
+            raise DataUnavailableError(
+                f"SHA-256 mismatch: expected {expected_hex}, got {actual_hex}."
+            )
+        try:
+            with (
+                gz_path.open("rb") as compressed,
+                gzip.GzipFile(fileobj=compressed, mode="rb") as expanded,
+                db_path_tmp.open("wb") as destination,
+            ):
+                copy_bounded(
+                    cast(BinaryIO, expanded),
+                    destination,
+                    max_bytes=config.max_database_bytes,
+                )
+        except (OSError, DownloadError) as exc:
+            raise DataUnavailableError(f"Failed to decompress prebuilt DB: {exc}") from exc
+        _check_schema(db_path_tmp)
+        os.replace(db_path_tmp, db_path)
+    finally:
+        gz_path.unlink(missing_ok=True)
+        db_path_tmp.unlink(missing_ok=True)
     logger.info("fetch_prebuilt wrote db db_file=%s", db_path.name)
-
-    _check_schema(db_path)
     return db_path
 
 
