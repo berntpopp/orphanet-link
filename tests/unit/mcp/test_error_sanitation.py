@@ -9,7 +9,10 @@ attacker-prose / path defense is fixed-message severing at the source, tested in
 
 from __future__ import annotations
 
+import pytest
+
 from orphanet_link.mcp.untrusted_content import (
+    FORBIDDEN_CODEPOINTS,
     MAX_MESSAGE_CHARS,
     sanitize_message,
     sanitize_tree,
@@ -17,6 +20,12 @@ from orphanet_link.mcp.untrusted_content import (
 
 # NUL + zero-width joiner (U+200D) + BOM (U+FEFF) + RTL override (U+202E)
 _FORBIDDEN = "\x00‍﻿‮"
+
+
+@pytest.mark.parametrize("code_point", sorted(FORBIDDEN_CODEPOINTS))
+def test_sanitize_message_strips_every_forbidden_code_point(code_point: int) -> None:
+    ch = chr(code_point)
+    assert sanitize_message(f"a{ch}b") == "ab"
 
 
 def test_sanitize_message_strips_forbidden_code_points() -> None:

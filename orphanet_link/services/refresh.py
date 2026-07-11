@@ -33,7 +33,9 @@ async def bootstrap_data(config: OrphanetDataConfig, logger: Any) -> None:
         path = await asyncio.to_thread(ensure_database, config)
         logger.info("orphanet_data_ready", db_file=path.name)
     except (DataUnavailableError, DownloadError, OSError) as exc:
-        logger.warning("orphanet_data_bootstrap_failed", error=str(exc))
+        # Log only the exception class: str(exc) can carry upstream body text / control
+        # code points / a local path from the bootstrap fetch path.
+        logger.warning("orphanet_data_bootstrap_failed", error_type=type(exc).__name__)
 
 
 async def _refresh_loop(config: OrphanetDataConfig, logger: Any) -> None:
@@ -48,7 +50,8 @@ async def _refresh_loop(config: OrphanetDataConfig, logger: Any) -> None:
             path = await asyncio.to_thread(ensure_database, config)
             logger.debug("orphanet_data_refresh_checked", db_file=path.name)
         except (DataUnavailableError, DownloadError, OSError) as exc:
-            logger.warning("orphanet_data_refresh_failed", error=str(exc))
+            # Log only the exception class (see bootstrap_data): never str(exc).
+            logger.warning("orphanet_data_refresh_failed", error_type=type(exc).__name__)
 
 
 def start_refresh_scheduler(config: OrphanetDataConfig, logger: Any) -> asyncio.Task[None] | None:

@@ -99,7 +99,10 @@ def _fetch_release(config: OrphanetDataConfig, release_url: str) -> dict[str, An
     except httpx.HTTPError as exc:
         raise DataUnavailableError(f"Network error fetching release metadata: {exc}") from exc
     except (DownloadError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise DataUnavailableError(f"Invalid GitHub release metadata: {exc}") from exc
+        # Fixed, body-free message: a decode/JSON error's text can embed raw upstream
+        # response bytes (an attacker-influenceable artifact body). The detail stays in
+        # the chained cause only -- never surfaced to a caller or written to a log.
+        raise DataUnavailableError("Invalid GitHub release metadata.") from exc
     if not isinstance(release, dict):
         raise DataUnavailableError("Invalid GitHub release metadata: expected an object.")
     return release
@@ -253,8 +256,17 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
                     destination,
                     max_bytes=config.max_database_bytes,
                 )
-        except (OSError, DownloadError) as exc:
+        except DownloadError as exc:
+            # copy_bounded's size guard raises our OWN fixed-form message (a bounded
+            # scalar, e.g. "download exceeded N bytes") -- no upstream body, safe.
             raise DataUnavailableError(f"Failed to decompress prebuilt DB: {exc}") from exc
+        except OSError as exc:
+            # Fixed, body-free message: str(BadGzipFile)/OSError can embed raw upstream
+            # artifact bytes (e.g. the bad gzip magic). The detail stays in the chained
+            # cause only -- never surfaced to a caller or written to a log.
+            raise DataUnavailableError(
+                "Failed to decompress the prebuilt Orphanet database."
+            ) from exc
         _check_schema(db_path_tmp)
         os.replace(db_path_tmp, db_path)
     finally:
@@ -351,9 +363,12 @@ def ensure_database(config: OrphanetDataConfig) -> Path:
             logger.info("ensure_database trying fetch_prebuilt")
             return fetch_prebuilt(config)
         except DataUnavailableError as exc:
+            # Log ONLY the stable exception class, never str(exc): a fetch_prebuilt
+            # DataUnavailableError can carry upstream metadata/artifact body text (or a
+            # local path) in its message/chained cause.
             logger.warning(
-                "ensure_database prebuilt fetch failed, falling back to local_build: %s",
-                exc,
+                "ensure_database prebuilt fetch failed, falling back to local_build (%s)",
+                type(exc).__name__,
             )
 
     logger.info("ensure_database running local_build")
