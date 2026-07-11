@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-11
+
+### Security
+
+- Guard the FastMCP-core not-found reflection surface (Response-Envelope v1.1
+  §Error-message sanitation fast-follow). FastMCP core echoes the caller's OWN
+  requested tool name / resource URI / prompt name (with any
+  control/zero-width/bidi/NUL code points) back to the caller and to logs BEFORE
+  any backend middleware runs. A new `orphanet_link/mcp/notfound_guard.py` closes
+  it with fixed, input-free constants: Layer 1 preflights the tool name
+  (`get_tool(name) is None` -> fixed name-free `not_found` envelope, `is_error=True`,
+  no `_meta.tool` echo); Layer 2 masks any `on_read_resource` failure with a fixed
+  URI-free `ResourceError`; Layer 3 a protocol-handler backstop wraps the raw
+  CallTool/ReadResource/GetPrompt handlers (covers the unknown-tool return path and
+  the unknown-prompt echo); Layer 5 a validation-log scrub filter neutralizes the
+  FastMCP/MCP-SDK records ("Tool cache miss for", "Handler called: ...", "Failed to
+  validate request") at their source loggers + FastMCP's non-propagating Rich
+  handlers so no caller name/URI reaches a log sink at any level. Caller
+  self-reflection surface (lower risk than upstream injection); no schema change.
+  Research use only.
+
 ## [0.3.1] - 2026-07-11
 
 ### Security
