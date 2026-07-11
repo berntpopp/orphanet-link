@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-11
+
+### Changed (BREAKING)
+
+- Response-Envelope Standard v1.1 untrusted-content fencing: `get_disease`'s
+  `definition` and `search_diseases`' `results[*].definition` (standard/full
+  response modes) are no longer bare strings. Each is now a typed
+  `untrusted_text` object (`kind`, `text`, `provenance.{source,record_id,
+  retrieved_at}`, `raw_sha256`) so upstream Orphanet prose is structurally
+  typed as data, never confusable with instructions, at the MCP boundary.
+  Defense in depth; research use only. Hosts reading the old bare-string
+  `definition` field must update to read `definition.text`.
+
+### Security
+
+- Add `orphanet_link/mcp/untrusted_content.py` (the byte-identical PubTator
+  v1.1 fence primitive plus a limits helper) and enforce the standard's
+  2 MiB/object and 128-objects/8-MiB-total ceilings on every fenced response.
+
 ## [0.2.0] - 2026-07-10
 
 ### Security

@@ -18,11 +18,10 @@ from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, pa
 from orphanet_link.services.compose import compose_sections
 from orphanet_link.services.pagination import page_fields
 from orphanet_link.services.resolution import resolve
-from orphanet_link.services.shaping import (
-    DEFAULT_RESPONSE_MODE,
-    group_xrefs,
-    shape,
-    shape_search_hit,
+from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE, group_xrefs, shape
+from orphanet_link.services.untrusted_text import (
+    shape_and_fence_disease,
+    shape_and_fence_search_hits,
 )
 
 _MAX_LIMIT = 1000
@@ -139,7 +138,7 @@ class OrphanetService:
         )
         hits = result.get("results", [])
         total = result.get("total", len(hits))
-        results = [shape_search_hit(hit, response_mode) for hit in hits]
+        results = shape_and_fence_search_hits(hits, response_mode)
         return {
             "query": raw,
             "results": results,
@@ -182,7 +181,7 @@ class OrphanetService:
         }
         if include:
             payload.update(compose_sections(self.repo, code, include))
-        return shape(payload, response_mode, fields=fields)
+        return shape_and_fence_disease(payload, response_mode, fields, orpha_code=code)
 
     def get_disease_genes(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE

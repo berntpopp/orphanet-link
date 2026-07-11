@@ -14,17 +14,18 @@ from orphanet_link.mcp.untrusted_content import (
 
 
 def test_fence_normalizes_and_removes_forbidden_controls() -> None:
-    raw = "Café\x00​‮\nBRCA1"
+    raw = "Cafe\u0301\x00\u200b\u202e\nBRCA1"
     fenced = fence_untrusted_text(raw, source="orphanet", record_id="ORPHA:1")
+
     assert fenced.kind == "untrusted_text"
-    assert fenced.text == "Café\nBRCA1"
+    assert fenced.text == "Caf\u00e9\nBRCA1"
     assert fenced.raw_sha256 == hashlib.sha256(raw.encode("utf-8")).hexdigest()
     assert fenced.provenance.source == "orphanet"
     assert fenced.provenance.record_id == "ORPHA:1"
 
 
 def test_fence_preserves_tabs_newlines_and_scientific_symbols() -> None:
-    raw = "p.Gly12Asp\tΔG = −1.2 kcal/mol\r\n"
+    raw = "p.Gly12Asp\t\u0394G = \u22121.2 kcal/mol\r\n"
     assert fence_untrusted_text(raw, source="orphanet", record_id="ORPHA:1").text == raw
 
 

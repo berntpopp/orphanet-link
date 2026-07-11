@@ -119,10 +119,17 @@ class _StubRepo:
 def test_injection_survives_real_tool_round_trip() -> None:
     """A real tool round-trip returns embedded instruction text verbatim as data.
 
+    ``definition`` is a Response-Envelope v1.1 fenced ``untrusted_text`` object
+    (see ``orphanet_link/mcp/untrusted_content.py``): the instruction-like prose
+    survives verbatim inside ``text`` -- the fence types it as data, it neither
+    rewrites nor executes it. ``name`` has no free-text surface classification
+    and stays a bare string.
+
     Uses a fresh ``OrphanetService`` with an injected stub repo, so the global service
     singleton the session ``facade`` depends on is never touched.
     """
     svc = OrphanetService(repo=_StubRepo())
     result = svc.get_disease("ORPHA:1", response_mode="standard")
     assert result["name"] == INJECTION
-    assert result["definition"] == INJECTION
+    assert result["definition"]["kind"] == "untrusted_text"
+    assert result["definition"]["text"] == INJECTION

@@ -38,6 +38,30 @@ _ARR = {"type": "array"}
 _ARR_NULL = {"type": ["array", "null"]}
 _OBJ = {"type": "object", "additionalProperties": True}
 
+#: A Response-Envelope v1.1 fenced externally sourced free-text field (typed
+#: object, not a bare string) -- see orphanet_link/mcp/untrusted_content.py.
+#: ``kind`` is the schema literal; the raw/sanitized prose is never duplicated
+#: in a sibling field. Nullable: the upstream source may have no definition for
+#: a given record, mirroring ``_STR_NULL``'s ``type`` array idiom.
+_UNTRUSTED_TEXT_NULL = {
+    "type": ["object", "null"],
+    "additionalProperties": True,
+    "properties": {
+        "kind": {"type": "string", "const": "untrusted_text"},
+        "text": _STR,
+        "provenance": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "source": _STR,
+                "record_id": _STR,
+                "retrieved_at": _STR,
+            },
+        },
+        "raw_sha256": _STR,
+    },
+}
+
 #: One cross-reference target within a prefix group: ONE entry per object_id. The
 #: primary ``predicate``/``origin`` are the strongest mapping's; ``predicates`` lists
 #: all of them (strongest-first) only when a target is asserted more than once;
@@ -104,7 +128,7 @@ _SEARCH_HIT = {
         "orpha_code": _STR,
         "name": _STR,
         "score": {"type": "number"},
-        "definition": _STR_NULL,
+        "definition": _UNTRUSTED_TEXT_NULL,
         "definition_snippet": _STR,
     },
 }
@@ -124,7 +148,7 @@ SEARCH_SCHEMA = _envelope(
 DISEASE_SCHEMA = _envelope(
     orpha_code=_STR,
     name=_STR,
-    definition=_STR_NULL,
+    definition=_UNTRUSTED_TEXT_NULL,
     synonyms=_ARR,
     xrefs=_GROUPED_XREFS,
     parents=_ARR,
