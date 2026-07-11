@@ -9,6 +9,11 @@ from fastmcp import FastMCP
 from orphanet_link import __version__
 from orphanet_link.mcp.capabilities import register_capability_resources
 from orphanet_link.mcp.middleware import ArgValidationMiddleware
+from orphanet_link.mcp.notfound_guard import (
+    NotFoundGuard,
+    install_protocol_error_handler,
+    install_validation_log_filter,
+)
 from orphanet_link.mcp.resources import ORPHANET_SERVER_INSTRUCTIONS
 from orphanet_link.mcp.tools import (
     register_association_tools,
@@ -55,6 +60,17 @@ def create_orphanet_mcp() -> FastMCP:
         instructions=ORPHANET_SERVER_INSTRUCTIONS,
         mask_error_details=True,
     )
+    # Layer 5: scrub FastMCP-core / MCP-SDK validation + handler logs that would
+    # echo the caller-supplied tool name / resource URI / prompt name (with any
+    # control/zero-width/bidi/NUL code points) at ANY level. Attach now, after
+    # FastMCP's own non-propagating Rich handlers exist. See notfound_guard.py.
+    install_validation_log_filter()
+
+    # Layer 1 (tool-name preflight) + Layer 2 (on_read_resource boundary). Added
+    # FIRST so NotFoundGuard is the OUTERMOST middleware: an unknown tool name is
+    # answered with a fixed, name-free envelope before core dispatch can reflect
+    # it, and a failed/unknown resource read never echoes the requested URI.
+    mcp.add_middleware(NotFoundGuard())
 
     register_discovery_tools(mcp)
     register_disease_tools(mcp)
@@ -64,5 +80,12 @@ def create_orphanet_mcp() -> FastMCP:
     register_batch_tools(mcp)
     register_capability_resources(mcp)
     mcp.add_middleware(ArgValidationMiddleware())
+
+    # Layer 3: install the protocol-handler backstop AFTER every tool/resource/
+    # prompt is registered (so the request handlers exist). Outermost wrapper on
+    # the raw CallTool/ReadResource/GetPrompt handlers -- catches the unknown-tool
+    # *return* path and any resource/prompt dispatch error that would echo the
+    # requested name/URI (the only layer covering the unknown-prompt surface).
+    install_protocol_error_handler(mcp)
 
     return mcp
