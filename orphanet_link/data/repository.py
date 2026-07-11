@@ -32,10 +32,14 @@ class OrphanetRepository:
     def __init__(self, db_path: str | Path) -> None:
         """Open a read-only connection; raises ``DataUnavailableError`` if missing."""
         self._path = Path(db_path)
+        # Sever the host filesystem path (and any sqlite str(exc)) from the
+        # caller-visible message: the path is a low-value info-disclosure leak that
+        # reaches the MCP error envelope + get_diagnostics. Keep only a fixed,
+        # path-free message; the actionable build hint is a static string. The
+        # original detail stays in the chained cause (server-side only).
         if not self._path.exists():
             raise DataUnavailableError(
-                f"Orphanet database not found at {self._path}. "
-                "Build it with `orphanet-link-data build`."
+                "The local Orphanet index is not built. Run `orphanet-link-data build`."
             )
         try:
             self._conn = sqlite3.connect(
@@ -44,9 +48,7 @@ class OrphanetRepository:
                 check_same_thread=False,
             )
         except sqlite3.Error as exc:  # pragma: no cover
-            raise DataUnavailableError(
-                f"Cannot open Orphanet database at {self._path}: {exc}."
-            ) from exc
+            raise DataUnavailableError("The local Orphanet index could not be opened.") from exc
         self._conn.row_factory = sqlite3.Row
 
     def close(self) -> None:
@@ -78,9 +80,9 @@ class OrphanetRepository:
         try:
             row = self._conn.execute("SELECT * FROM meta WHERE id = 1").fetchone()
         except sqlite3.Error as exc:
-            raise DataUnavailableError(
-                f"Orphanet database at {self._path} is unreadable: {exc}."
-            ) from exc
+            # Fixed, path-free message (see __init__): never echo the host path or
+            # the raw sqlite str(exc) into a caller-visible error.
+            raise DataUnavailableError("The local Orphanet index is unreadable.") from exc
         return dict(row) if row is not None else {}
 
     # -- disorder records ------------------------------------------------------

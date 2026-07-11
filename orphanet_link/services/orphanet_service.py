@@ -101,11 +101,13 @@ class OrphanetService:
                 "build_utc": self._meta(meta, "build_utc"),
                 "disorder_count": self._meta(meta, "disorder_count"),
             }
-        except DataUnavailableError as exc:
+        except DataUnavailableError:
+            # SEVER: str(exc) can carry a host filesystem path / internal detail; return
+            # a fixed message (db_path is already basename-only above/below).
             return {
                 "index_built": False,
                 "db_path": self._db_path.name if self._db_path else None,
-                "message": str(exc),
+                "message": "The local Orphanet index is unavailable.",
             }
 
     def resolve_disease(

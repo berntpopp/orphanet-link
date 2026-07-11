@@ -9,7 +9,7 @@ failing the whole call. A batch-size cap returns a single ``invalid_input`` erro
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from pydantic import Field
 
@@ -21,6 +21,7 @@ from orphanet_link.mcp.next_commands import after_get_disease_batch, after_resol
 from orphanet_link.mcp.schemas import BATCH_DISEASE_SCHEMA, BATCH_RESOLVE_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode
+from orphanet_link.mcp.untrusted_content import sanitize_tree
 from orphanet_link.mcp.untrusted_fencing import (
     UntrustedText,
     enforce_untrusted_text_limits,
@@ -75,7 +76,10 @@ def _error_row(
     candidates = getattr(exc, "candidates", None) or getattr(exc, "suggestions", None)
     if candidates:
         row["candidates"] = candidates[: _CANDIDATE_CAP.get(response_mode, 3)]
-    return row
+    # Batch rows ride inside an OTHERWISE-SUCCESSFUL response and bypass the error
+    # envelope, so sanitize the row's own string leaves (message + candidate prose)
+    # here; ``value`` is the caller's own echoed key/term.
+    return cast("dict[str, Any]", sanitize_tree(row))
 
 
 def register_batch_tools(mcp: FastMCP) -> None:

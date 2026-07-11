@@ -29,6 +29,7 @@ from orphanet_link.mcp.arg_help import (
     tool_signature,
 )
 from orphanet_link.mcp.envelope import build_arg_error_envelope
+from orphanet_link.mcp.untrusted_content import sanitize_tree
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,12 @@ class ArgValidationMiddleware(Middleware):
             suggestion=suggestion,
             constraints=constraints,
         )
-        logger.warning("mcp_arg_error tool=%s loc=%s type=%s", name, loc, error_type)
+        # Whole-envelope code-point backstop (this frame bypasses run_mcp_tool).
+        envelope = sanitize_tree(envelope)
+        # Log ONLY stable, low-cardinality metadata (tool name + the pydantic error
+        # type). The offending argument NAME is caller-controlled, so it is never
+        # written to the log sink -- the sanitized value still rides the envelope.field.
+        logger.warning("mcp_arg_error tool=%s type=%s", name, error_type)
         return ToolResult(
             structured_content=envelope,
             content=[TextContent(type="text", text=json.dumps(envelope))],

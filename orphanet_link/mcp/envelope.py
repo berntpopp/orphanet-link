@@ -13,7 +13,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -29,10 +29,22 @@ from orphanet_link.exceptions import (
 )
 from orphanet_link.mcp import metrics
 from orphanet_link.mcp.next_commands import cmd, default_error_next_commands, withdrawn_recovery
-from orphanet_link.mcp.untrusted_content import UntrustedTextLimitError
+from orphanet_link.mcp.untrusted_content import (
+    UntrustedTextLimitError,
+    sanitize_message,
+    sanitize_tree,
+)
 from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE
 
 logger = logging.getLogger(__name__)
+
+#: Fixed, path-free public message for a missing/unreadable local index. The
+#: underlying DataUnavailableError may embed a host filesystem path or a raw sqlite
+#: str(exc) (see data/repository.py), so its classified message is SEVERED to this
+#: constant rather than surfaced -- code-point stripping alone would leave the path.
+_DATA_UNAVAILABLE_MESSAGE = (
+    "The local Orphanet index is unavailable. Run `orphanet-link-data build`."
+)
 
 # Per-call _meta is kept lean: static provenance (citation, Orphanet release)
 # lives ONLY in get_server_capabilities. Per-call _meta carries a fixed
@@ -84,7 +96,11 @@ def _capabilities_version() -> str | None:
 
 
 def _safe_message(exc: BaseException) -> str:
-    return (str(exc) or exc.__class__.__name__)[:280]
+    # Code-point backstop for SERVER-AUTHORED classified messages (our own fixed
+    # templates, possibly echoing a caller-supplied identifier). Attacker-
+    # influenceable prose / local paths are severed to fixed messages at the source
+    # and in _classify -- never routed through here.
+    return sanitize_message(str(exc) or exc.__class__.__name__)
 
 
 def _classify(exc: BaseException) -> tuple[str, str]:
@@ -104,15 +120,19 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         # ceiling detail, never a generic internal_error.
         return "limit_exceeded", _safe_message(exc)
     if isinstance(exc, DataUnavailableError):
-        return "data_unavailable", _safe_message(exc)
+        # SEVER: the message may embed a host path / sqlite str(exc); never surface it.
+        return "data_unavailable", _DATA_UNAVAILABLE_MESSAGE
     if isinstance(exc, RateLimitError):
         return "rate_limited", "Upstream rate limit hit. Retry shortly."
     if isinstance(exc, ServiceUnavailableError | DownloadError):
         return "upstream_unavailable", "The upstream is temporarily unavailable."
     if isinstance(exc, PydanticValidationError):
-        first = exc.errors()[0]
-        loc = ".".join(str(p) for p in first["loc"]) or "input"
-        return "invalid_input", f"Invalid input -- `{loc}`: {first['msg']}"
+        # Map to a FIXED reason: the pydantic ``msg`` can echo the rejected input, and
+        # the ``loc`` (argument name) is caller-controlled -- code-point-strip it and
+        # never interpolate the pydantic message prose.
+        first = exc.errors(include_url=False)[0]
+        loc = sanitize_message(".".join(str(p) for p in first["loc"]) or "input")
+        return "invalid_input", f"Invalid value for argument `{loc}`."
     return "internal_error", "An internal error occurred. The request was not completed."
 
 
@@ -141,7 +161,9 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
     envelope: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
-        "message": message,
+        # Code-point backstop (e.g. a server-authored McpToolError.message). The whole
+        # envelope is also recursively sanitized in run_mcp_tool before it is returned.
+        "message": sanitize_message(message),
         "retryable": error_code in _RETRYABLE,
         "recovery_action": _recovery_action(error_code),
         "_meta": {
@@ -209,13 +231,17 @@ def build_arg_error_envelope(
     argument, so ``allowed_values`` carries the valid range/enum (not the list of
     argument *names*) and the message states the constraint.
     """
+    # ``loc`` is a caller-controlled argument NAME (an unknown/unexpected keyword can
+    # carry forbidden code points): code-point-strip it before it reaches ``field`` or
+    # any interpolated message. ``human``/``signature`` are server-authored.
+    loc = sanitize_message(loc)
     if constraints is not None:
         allowed, human = constraints
         message = f"Invalid value for argument `{loc}` of {tool_name}: {human}."
         return {
             "success": False,
             "error_code": "invalid_input",
-            "message": message[:280],
+            "message": sanitize_message(message),
             "retryable": False,
             "recovery_action": "reformulate_input",
             "field": loc,
@@ -240,7 +266,7 @@ def build_arg_error_envelope(
     return {
         "success": False,
         "error_code": "invalid_input",
-        "message": message[:280],
+        "message": sanitize_message(message),
         "retryable": False,
         "recovery_action": "reformulate_input",
         "field": loc,
@@ -372,4 +398,7 @@ async def run_mcp_tool(
             request_id,
             exc.__class__.__name__,
         )
-        return envelope
+        # Whole-envelope code-point backstop over EVERY string leaf (message, field,
+        # allowed_values, hint, candidates, replaced_by, next_commands arguments, _meta)
+        # so no forbidden code point survives on any error surface, whatever built it.
+        return cast("dict[str, Any]", sanitize_tree(envelope))
