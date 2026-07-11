@@ -1,11 +1,25 @@
-"""Response-Envelope v1.1 fencing for the orphanet ``definition`` free-text field.
+"""Response-Envelope v1.1 fencing for the orphanet ``definition`` free-text fields.
 
-Owns the full shape-then-fence lifecycle for the two inventory-named surfaces
-(``get_disease /definition`` and ``search_diseases /results/*/definition``) so
-``orphanet_service.py`` stays within its per-file line budget. The fencing
-primitives themselves live untouched in ``orphanet_link/mcp/untrusted_content.py``
-(the copied PubTator reference); this module only wires them to the two
-existing shaping entry points (``shape``, ``shape_search_hit``).
+Owns the full shape-then-fence lifecycle for every inventory-named upstream
+free-text surface so ``orphanet_service.py`` stays within its per-file line
+budget. The fencing primitives themselves live untouched in
+``orphanet_link/mcp/untrusted_content.py`` (the copied PubTator reference); this
+module only wires them to the two existing shaping entry points (``shape``,
+``shape_search_hit``).
+
+Fenced surfaces:
+
+- ``get_disease /definition`` (compact/standard/full response modes).
+- ``search_diseases /results/*/definition`` (standard/full) **and**
+  ``search_diseases /results/*/definition_snippet`` (compact -- the DEFAULT
+  search mode, so the most-used path). A search hit carries at most ONE of the
+  two (they are mutually exclusive per response_mode), so no single response
+  ever duplicates the same prose in two sibling fields.
+
+The invariant used throughout: fence the exact string currently sitting at the
+field key, in place -- so ``raw_sha256`` always covers the bytes actually served
+(the full definition, or the pre-computed compact snippet), and ``shape`` /
+``shape_search_hit`` themselves stay unmodified pure functions.
 """
 
 from __future__ import annotations
@@ -22,29 +36,27 @@ from orphanet_link.services.shaping import shape, shape_search_hit
 #: Response-Envelope v1.1 untrusted-text provenance label for this backend.
 SOURCE = "orphanet"
 
+#: Search-hit keys that may carry externally sourced Orphanet free-text prose.
+#: At most ONE is present per hit (response_mode picks it): standard/full ->
+#: ``definition``; compact -> ``definition_snippet``.
+_SEARCH_TEXT_KEYS: tuple[str, ...] = ("definition", "definition_snippet")
 
-def fence_definition(raw: str | None, *, orpha_code: str) -> UntrustedText | None:
-    """Fence a disorder ``definition`` string, or return ``None`` if absent.
 
-    ``record_id`` is the CURIE-style ORPHAcode (e.g. ``"ORPHA:558"``), matching
-    the identifier shape used elsewhere in the service (see ``NotFoundError``).
+def _fence_field(shaped: dict[str, Any], key: str, *, orpha_code: str) -> UntrustedText | None:
+    """Replace ``shaped[key]`` in place with its fenced typed object, if present.
+
+    Fences the exact non-empty string currently at ``key`` (the full definition,
+    or the already-computed compact snippet), so ``raw_sha256`` covers the bytes
+    actually served. ``record_id`` is the CURIE-style ORPHAcode (e.g.
+    ``"ORPHA:558"``), matching the identifier shape used elsewhere in the service.
+    No-op (returns ``None``) when the key is absent or its value is not a
+    non-empty string (projected out by response_mode/fields, or null).
     """
-    if not raw:
+    raw = shaped.get(key)
+    if not isinstance(raw, str) or not raw:
         return None
-    return fence_untrusted_text(raw, source=SOURCE, record_id=f"ORPHA:{orpha_code}")
-
-
-def _apply(shaped: dict[str, Any], raw: str | None, *, orpha_code: str) -> UntrustedText | None:
-    """Replace ``shaped["definition"]`` in place with its fenced form, if present.
-
-    No-op (returns ``None``) when ``shaped`` carries no ``definition`` key
-    (response_mode/fields projected it out) or ``raw`` is empty.
-    """
-    if "definition" not in shaped:
-        return None
-    fenced = fence_definition(raw, orpha_code=orpha_code)
-    if fenced is not None:
-        shaped["definition"] = fenced.model_dump(mode="json")
+    fenced = fence_untrusted_text(raw, source=SOURCE, record_id=f"ORPHA:{orpha_code}")
+    shaped[key] = fenced.model_dump(mode="json")
     return fenced
 
 
@@ -56,9 +68,8 @@ def shape_and_fence_disease(
     orpha_code: str,
 ) -> dict[str, Any]:
     """Shape a ``get_disease`` payload, then fence its ``definition`` in place."""
-    definition_raw = payload.get("definition")
     shaped = shape(payload, response_mode, fields=fields)
-    fenced = _apply(shaped, definition_raw, orpha_code=orpha_code)
+    fenced = _fence_field(shaped, "definition", orpha_code=orpha_code)
     if fenced is not None:
         enforce_untrusted_text_limits([fenced])
     return shaped
@@ -67,20 +78,22 @@ def shape_and_fence_disease(
 def shape_and_fence_search_hits(
     hits: list[dict[str, Any]], response_mode: str
 ) -> list[dict[str, Any]]:
-    """Shape each search hit, then fence its ``definition``, enforcing v1.1 limits.
+    """Shape each search hit, then fence its free-text field, enforcing v1.1 limits.
 
-    Every fenced object across the whole result page is collected and checked
-    together so the 128-objects/8-MiB-total ceilings apply to the response as a
-    whole, not per row.
+    Fences whichever of ``definition`` / ``definition_snippet`` the shaped hit
+    carries (mutually exclusive per response_mode). Every fenced object across the
+    whole result page is collected and checked together so the 128-objects /
+    8-MiB-total ceilings apply to the response as a whole, not per row.
     """
     results: list[dict[str, Any]] = []
     fenced_objs: list[UntrustedText] = []
     for hit in hits:
         shaped_hit = shape_search_hit(hit, response_mode)
         orpha_code = str(hit.get("orpha_code", ""))
-        fenced = _apply(shaped_hit, hit.get("definition"), orpha_code=orpha_code)
-        if fenced is not None:
-            fenced_objs.append(fenced)
+        for key in _SEARCH_TEXT_KEYS:
+            fenced = _fence_field(shaped_hit, key, orpha_code=orpha_code)
+            if fenced is not None:
+                fenced_objs.append(fenced)
         results.append(shaped_hit)
     if fenced_objs:
         enforce_untrusted_text_limits(fenced_objs)

@@ -1,11 +1,13 @@
 """Hostile-vector fencing test: upstream prose is typed data, never instructions.
 
 Drives ``OrphanetService.get_disease`` and ``OrphanetService.search_diseases``
-(the two inventory-named surfaces for orphanet: ``get_disease /definition`` and
-``search_diseases /results/*/definition``) with a stub repository whose
-``definition`` carries an injection payload interleaved with zero-width/bidi
-control characters, proving the MCP boundary emits the v1.1 ``untrusted_text``
-typed object rather than a bare string.
+across all three orphanet free-text surfaces -- ``get_disease /definition``,
+``search_diseases /results/*/definition`` (standard/full), and
+``search_diseases /results/*/definition_snippet`` (compact, the DEFAULT and
+most-used search path) -- with a stub repository whose ``definition`` carries an
+injection payload interleaved with zero-width/bidi control characters, proving
+the MCP boundary emits the v1.1 ``untrusted_text`` typed object rather than a
+bare string.
 """
 
 from __future__ import annotations
@@ -86,6 +88,32 @@ def test_search_diseases_definition_is_fenced_typed_object() -> None:
 
     hit = result["results"][0]
     fenced = hit["definition"]
+    assert fenced["kind"] == "untrusted_text"
+    assert fenced["raw_sha256"] == hashlib.sha256(HOSTILE.encode("utf-8")).hexdigest()
+    assert "delete_everything" in fenced["text"]
+    assert "Ignore all previous instructions" in fenced["text"]
+    assert "‍" not in fenced["text"]
+    assert "﻿" not in fenced["text"]
+    assert "‮" not in fenced["text"]
+    assert "tool" not in hit
+    assert "fallback_tool" not in hit
+    assert fenced["provenance"]["record_id"] == "ORPHA:2"
+    assert fenced["provenance"]["source"] == "orphanet"
+
+
+def test_search_diseases_compact_snippet_is_fenced_typed_object() -> None:
+    # compact is the DEFAULT search mode: it emits definition_snippet (a truncated
+    # copy of the same upstream prose), never the full definition. This is the
+    # most-used path, so the snippet must be fenced too. HOSTILE is < the snippet
+    # cap and carries no whitespace runs, so the snippet equals HOSTILE verbatim
+    # (no truncation/ellipsis) and its digest is over the exact HOSTILE bytes.
+    svc = OrphanetService(repo=_SearchStubRepo())
+    result = svc.search_diseases("stub", response_mode="compact")
+
+    hit = result["results"][0]
+    # compact emits ONLY the snippet -- never both, so no same-response prose dup
+    assert "definition" not in hit
+    fenced = hit["definition_snippet"]
     assert fenced["kind"] == "untrusted_text"
     assert fenced["raw_sha256"] == hashlib.sha256(HOSTILE.encode("utf-8")).hexdigest()
     assert "delete_everything" in fenced["text"]

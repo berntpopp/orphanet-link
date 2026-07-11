@@ -10,14 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed (BREAKING)
 
-- Response-Envelope Standard v1.1 untrusted-content fencing: `get_disease`'s
-  `definition` and `search_diseases`' `results[*].definition` (standard/full
-  response modes) are no longer bare strings. Each is now a typed
-  `untrusted_text` object (`kind`, `text`, `provenance.{source,record_id,
-  retrieved_at}`, `raw_sha256`) so upstream Orphanet prose is structurally
-  typed as data, never confusable with instructions, at the MCP boundary.
+- Response-Envelope Standard v1.1 untrusted-content fencing: every externally
+  sourced Orphanet free-text surface is now a typed `untrusted_text` object
+  (`kind`, `text`, `provenance.{source,record_id,retrieved_at}`, `raw_sha256`)
+  instead of a bare string, so upstream prose is structurally typed as data,
+  never confusable with instructions, at the MCP boundary. Fenced fields:
+  `get_disease`'s `definition`; `search_diseases`' `results[*].definition`
+  (standard/full modes) **and** `results[*].definition_snippet` (compact mode --
+  the default and most-used search path). The two search fields remain mutually
+  exclusive per response mode, so a response never duplicates the same prose.
   Defense in depth; research use only. Hosts reading the old bare-string
-  `definition` field must update to read `definition.text`.
+  `definition` / `definition_snippet` fields must update to read the `.text`
+  subfield.
 
 ### Security
 

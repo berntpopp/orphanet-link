@@ -128,8 +128,11 @@ _SEARCH_HIT = {
         "orpha_code": _STR,
         "name": _STR,
         "score": {"type": "number"},
+        # Both are the same upstream free-text surface, fenced as v1.1 untrusted_text.
+        # Mutually exclusive per response_mode: standard/full -> definition;
+        # compact (the default) -> definition_snippet.
         "definition": _UNTRUSTED_TEXT_NULL,
-        "definition_snippet": _STR,
+        "definition_snippet": _UNTRUSTED_TEXT_NULL,
     },
 }
 
