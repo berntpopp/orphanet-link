@@ -94,6 +94,12 @@ MATCH_TYPES: list[str] = ["orpha_code", "xref", "exact_label", "search"]
 #: Hard cap on items per batch call.
 MAX_BATCH_ITEMS: int = 50
 
+#: Hard cap on hits returned by search_diseases in one call. This is also the
+#: v1.1 untrusted-text object-count ceiling the search tool enforces (each hit
+#: contributes at most one fenced definition/snippet), so a full-limit search
+#: never trips the default 128-object DoS backstop.
+SEARCH_LIMIT_MAX: int = 200
+
 #: Orphanet / Orphadata license string.
 ORPHANET_LICENSE = (
     f"Orphadata is CC BY 4.0 ({LICENSE_URL}). Required attribution: "

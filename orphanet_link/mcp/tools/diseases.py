@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
 
+from orphanet_link.constants import SEARCH_LIMIT_MAX
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_get_disease, after_resolve_disease, after_search
@@ -17,6 +18,12 @@ from orphanet_link.mcp.tools._common import (
     QueryStr,
     ResponseMode,
     TermStr,
+)
+from orphanet_link.mcp.untrusted_fencing import (
+    UntrustedText,
+    enforce_untrusted_text_limits,
+    fence_disease_record,
+    fence_search_hits,
 )
 
 if TYPE_CHECKING:
@@ -89,6 +96,12 @@ def register_disease_tools(mcp: FastMCP) -> None:
                 include_obsolete=include_obsolete,
                 response_mode=response_mode,
             )
+            # v1.1: fence every hit's definition/snippet and limit-check the whole
+            # page at once. Object ceiling = the tool's real hit cap (SEARCH_LIMIT_MAX),
+            # so a full-limit search never trips the bare 128 default.
+            fenced: list[UntrustedText] = []
+            fence_search_hits(payload, fenced)
+            enforce_untrusted_text_limits(fenced, max_objects=SEARCH_LIMIT_MAX)
             payload.setdefault("_meta", {})["next_commands"] = after_search(query, payload)
             return payload
 
@@ -128,6 +141,12 @@ def register_disease_tools(mcp: FastMCP) -> None:
             payload = get_orphanet_service().get_disease(
                 term, response_mode=response_mode, fields=fields, include=include
             )
+            # v1.1: fence the single record's definition (a fenced object is an
+            # opaque leaf, so a `fields=["definition.text"]` projection cannot
+            # descend past the service's projector to leak the bare text).
+            fenced: list[UntrustedText] = []
+            fence_disease_record(payload, fenced)
+            enforce_untrusted_text_limits(fenced)
             payload.setdefault("_meta", {})["next_commands"] = after_get_disease(payload)
             return payload
 

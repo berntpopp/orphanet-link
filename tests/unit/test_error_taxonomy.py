@@ -28,6 +28,7 @@ from orphanet_link.exceptions import (
     ServiceUnavailableError,
 )
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
+from orphanet_link.mcp.untrusted_content import UntrustedTextLimitError
 from orphanet_link.services.orphanet_service import OrphanetService
 
 
@@ -54,6 +55,14 @@ _CASES: list[tuple[BaseException, str, bool, str]] = [
     (RateLimitError(), "rate_limited", True, "retry_backoff"),
     (ServiceUnavailableError(), "upstream_unavailable", True, "retry_backoff"),
     (DownloadError(), "upstream_unavailable", True, "retry_backoff"),
+    # A v1.1 fenced-response ceiling breach is an explicit typed limit error,
+    # recoverable by narrowing the request -- never a generic internal_error.
+    (
+        UntrustedTextLimitError("untrusted object count 300 exceeds ceiling 128"),
+        "limit_exceeded",
+        False,
+        "reformulate_input",
+    ),
     (ValueError("boom"), "internal_error", False, "switch_tool"),
 ]
 

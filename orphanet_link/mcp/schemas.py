@@ -243,6 +243,9 @@ _BATCH_ITEM = {
         "orpha_code": _STR_NULL,
         "name": _STR_NULL,
         "match_type": _STR_NULL,
+        # A get_disease_batch record mirrors get_disease: its definition is the
+        # same v1.1 untrusted_text object (kind const), never a bare string.
+        "definition": _UNTRUSTED_TEXT_NULL,
         "error_code": _STR,
         "message": _STR,
         #: Recovery candidates on an ambiguous (or suggestion-bearing) failed item.

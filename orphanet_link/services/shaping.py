@@ -133,13 +133,20 @@ def shape_search_hit(
 
 
 def _snippet(text: str, limit: int) -> str:
-    """Truncate ``text`` to ``limit`` chars on a word boundary (adds ``...``)."""
-    text = " ".join(text.split())  # normalise whitespace runs
+    """Truncate ``text`` to ``limit`` chars on a word boundary (adds ``…``).
+
+    Internal whitespace (tab/LF/CR) is **preserved**, never collapsed: a
+    downstream Response-Envelope v1.1 fence digests this snippet's true
+    pre-normalization bytes, and the standard requires tab/LF/CR be kept. Only a
+    trailing partial word and any trailing whitespace before the ellipsis are
+    trimmed. (Previously this collapsed whitespace runs, which stripped tab/LF/CR
+    and made the snippet digest cover rewritten text.)
+    """
     if len(text) <= limit:
         return text
-    cut = text[:limit].rstrip()
-    head, _, _ = cut.rpartition(" ")
-    return (head or cut) + "…"
+    cut = text[:limit]
+    head, sep, _ = cut.rpartition(" ")
+    return (head if sep else cut).rstrip() + "…"
 
 
 def group_xrefs(

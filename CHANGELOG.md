@@ -17,17 +17,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   never confusable with instructions, at the MCP boundary. Fenced fields:
   `get_disease`'s `definition`; `search_diseases`' `results[*].definition`
   (standard/full modes) **and** `results[*].definition_snippet` (compact mode --
-  the default and most-used search path). The two search fields remain mutually
-  exclusive per response mode, so a response never duplicates the same prose.
-  Defense in depth; research use only. Hosts reading the old bare-string
-  `definition` / `definition_snippet` fields must update to read the `.text`
-  subfield.
+  the default and most-used search path); and `get_disease_batch`'s per-record
+  `definition`. The two search fields remain mutually exclusive per response
+  mode, so a response never duplicates the same prose. Hosts reading the old
+  bare-string `definition` / `definition_snippet` fields must update to read the
+  `.text` subfield. Defense in depth; research use only.
+
+### Added
+
+- `limit_exceeded` error code: a fenced response that exceeds a v1.1 ceiling
+  (object count / per-object bytes / total bytes) now returns an explicit typed
+  limit error (recovery `reformulate_input`), never a generic `internal_error` --
+  the standard forbids silent omission.
 
 ### Security
 
-- Add `orphanet_link/mcp/untrusted_content.py` (the byte-identical PubTator
-  v1.1 fence primitive plus a limits helper) and enforce the standard's
-  2 MiB/object and 128-objects/8-MiB-total ceilings on every fenced response.
+- Add `orphanet_link/mcp/untrusted_content.py` (the byte-identical PubTator v1.1
+  fence primitive plus a limits helper) and apply it at the MCP serialization
+  boundary (`orphanet_link/mcp/untrusted_fencing.py`), keeping the data plane free
+  of any MCP dependency. Every tool aggregates all the fenced objects it emits
+  into ONE limit check so the whole-response ceilings bind (2 MiB/object,
+  8 MiB total); the object-count ceiling is each tool's real result cap (search =
+  200 hits, batch = 50 records), not the bare 128 default, so a legitimate
+  full-size response never raises. Compact search snippets are truncated from the
+  RAW upstream prose (tab/LF/CR preserved) before fencing, so `raw_sha256` covers
+  the true served bytes.
 
 ## [0.2.0] - 2026-07-10
 

@@ -21,6 +21,11 @@ from orphanet_link.mcp.next_commands import after_get_disease_batch, after_resol
 from orphanet_link.mcp.schemas import BATCH_DISEASE_SCHEMA, BATCH_RESOLVE_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode
+from orphanet_link.mcp.untrusted_fencing import (
+    UntrustedText,
+    enforce_untrusted_text_limits,
+    fence_disease_record,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -141,14 +146,21 @@ def register_batch_tools(mcp: FastMCP) -> None:
             _require_batch(terms, "terms")
             svc = get_orphanet_service()
             results: list[dict[str, Any]] = []
+            fenced: list[UntrustedText] = []
             version: str | None = None
             for index, term in enumerate(terms):
                 try:
                     rec = svc.get_disease(term, response_mode=response_mode, fields=fields)
                     version = rec.pop("orphanet_version", None) or version  # grounded once
-                    results.append({**rec, "term": term, "index": index, "ok": True})
+                    row = {**rec, "term": term, "index": index, "ok": True}
+                    fence_disease_record(row, fenced)  # fence this record's definition
+                    results.append(row)
                 except Exception as exc:  # per-item boundary; the call still succeeds
                     results.append(_error_row(exc, "term", term, index, response_mode))
+            # v1.1: ONE limit check over EVERY fenced object across the whole batch
+            # (not per get_disease call), so the 8-MiB-total / object-count ceilings
+            # bind the actual response. Object ceiling = the batch item cap.
+            enforce_untrusted_text_limits(fenced, max_objects=MAX_BATCH)
             payload: dict[str, Any] = {"count": len(results), "results": results}
             if version:
                 payload["orphanet_version"] = version

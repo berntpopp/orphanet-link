@@ -12,17 +12,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from orphanet_link.constants import HPO_FREQUENCIES
+from orphanet_link.constants import HPO_FREQUENCIES, SEARCH_LIMIT_MAX
 from orphanet_link.exceptions import DataUnavailableError, InvalidInputError, NotFoundError
 from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, parse_curie
 from orphanet_link.services.compose import compose_sections
 from orphanet_link.services.pagination import page_fields
 from orphanet_link.services.resolution import resolve
-from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE, group_xrefs, shape
-from orphanet_link.services.untrusted_text import (
-    shape_and_fence_disease,
-    shape_and_fence_search_hits,
+from orphanet_link.services.shaping import (
+    DEFAULT_RESPONSE_MODE,
+    group_xrefs,
+    shape,
+    shape_search_hit,
 )
+
+# NOTE: this module is the DATA plane -- it returns plain dicts with bare-string
+# free-text (definition / definition_snippet). The Response-Envelope v1.1
+# untrusted_text fencing is applied at the MCP serialization boundary
+# (orphanet_link/mcp/untrusted_fencing.py), never here, so the data plane carries
+# no dependency on the MCP plane.
 
 _MAX_LIMIT = 1000
 
@@ -131,14 +138,14 @@ class OrphanetService:
         raw = (query or "").strip()
         if not raw:
             raise InvalidInputError("query must be a non-empty search string.", field="query")
-        limit = max(1, min(limit, 200))
+        limit = max(1, min(limit, SEARCH_LIMIT_MAX))
         offset = max(0, offset)
         result = self.repo.search(
             raw, limit=limit, offset=offset, include_obsolete=include_obsolete
         )
         hits = result.get("results", [])
         total = result.get("total", len(hits))
-        results = shape_and_fence_search_hits(hits, response_mode)
+        results = [shape_search_hit(hit, response_mode) for hit in hits]
         return {
             "query": raw,
             "results": results,
@@ -181,7 +188,7 @@ class OrphanetService:
         }
         if include:
             payload.update(compose_sections(self.repo, code, include))
-        return shape_and_fence_disease(payload, response_mode, fields, orpha_code=code)
+        return shape(payload, response_mode, fields=fields)
 
     def get_disease_genes(
         self, term: str, response_mode: str = DEFAULT_RESPONSE_MODE

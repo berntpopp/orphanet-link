@@ -29,6 +29,7 @@ from orphanet_link.exceptions import (
 )
 from orphanet_link.mcp import metrics
 from orphanet_link.mcp.next_commands import cmd, default_error_next_commands, withdrawn_recovery
+from orphanet_link.mcp.untrusted_content import UntrustedTextLimitError
 from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,12 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         return "ambiguous_query", _safe_message(exc)
     if isinstance(exc, InvalidInputError):
         return "invalid_input", _safe_message(exc)
+    if isinstance(exc, UntrustedTextLimitError):
+        # A fenced response exceeded a Response-Envelope v1.1 ceiling (object
+        # count / per-object bytes / total bytes). Surface an explicit typed
+        # limit error -- the standard forbids silent omission -- with the safe
+        # ceiling detail, never a generic internal_error.
+        return "limit_exceeded", _safe_message(exc)
     if isinstance(exc, DataUnavailableError):
         return "data_unavailable", _safe_message(exc)
     if isinstance(exc, RateLimitError):
@@ -122,7 +129,9 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
 def _recovery_action(error_code: str) -> str:
     if error_code in _RETRYABLE:
         return "retry_backoff"
-    if error_code in {"invalid_input", "not_found", "ambiguous_query"}:
+    # limit_exceeded is recoverable by narrowing the request (smaller limit / batch),
+    # so it routes to reformulate_input like the other client-fixable input errors.
+    if error_code in {"invalid_input", "not_found", "ambiguous_query", "limit_exceeded"}:
         return "reformulate_input"
     return "switch_tool"
 
