@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-11
+
+### Security
+
+- Defense-in-depth error-message sanitation (secondary surface on top of the v1.1
+  untrusted-text fence). Every caller-visible error/diagnostics string is stripped
+  of the ratified control/zero-width/bidi/NUL code points (`sanitize_message` +
+  a recursive whole-envelope `sanitize_tree`) so they can never reach the model in
+  either `structured_content` or the `TextContent` JSON mirror. Attacker-
+  influenceable prose and internal detail are additionally SEVERED to fixed,
+  body-free messages at the source: the local SQLite index path and raw sqlite
+  `str(exc)` are no longer echoed into MCP error messages or `get_diagnostics`; the
+  argument-validation frame maps to a fixed reason with a code-point-stripped field
+  name; and the runtime bootstrap artifact-fetch client no longer echoes upstream
+  release-metadata / gzip body bytes into `DataUnavailableError` or into
+  bootstrap/refresh telemetry logs (only the exception class is logged). Research
+  use only.
+
 ## [0.3.0] - 2026-07-11
 
 ### Changed (BREAKING)
