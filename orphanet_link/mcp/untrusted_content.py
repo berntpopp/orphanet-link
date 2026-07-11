@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import unicodedata
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -100,3 +100,50 @@ def enforce_untrusted_text_limits(
         raise UntrustedTextLimitError(
             f"untrusted total {total} bytes exceeds ceiling {max_total_text_bytes}"
         )
+
+
+# --- error-message sanitation (defense-in-depth, secondary surface) -----------
+#
+# The primary defense is the untrusted_text fence above. These helpers close the
+# residual error-path leak: caller-visible error/diagnostics strings are stripped
+# of the SAME ratified control/zero-width/bidi/NUL code points so a hostile input
+# (or an internal exception whose text embeds them) can never smuggle control
+# characters into an error frame in either structured_content or the TextContent
+# JSON mirror. Code-point stripping is NOT sufficient on its own -- attacker-
+# influenceable PROSE / local paths are additionally SEVERED to fixed,
+# server-authored messages at the source (see envelope/repository), because
+# sanitize_message strips code points but leaves ordinary prose intact.
+
+MAX_MESSAGE_CHARS = 280
+
+
+def sanitize_message(text: str) -> str:
+    """Strip the fence's forbidden control/zero-width/bidi/NUL code points + length-cap.
+
+    Applied to every caller-visible message/error/diagnostics string. It removes only
+    the ratified code-point set (``FORBIDDEN_CODEPOINTS``); it deliberately does NOT
+    alter ordinary prose, so it is a backstop for *server-authored* strings only.
+    Attacker-influenceable prose (upstream/caller input, local filesystem paths) must
+    be severed to a fixed message at the source, never merely passed through here.
+    """
+    clean = "".join(char for char in text if ord(char) not in FORBIDDEN_CODEPOINTS)
+    return clean[:MAX_MESSAGE_CHARS]
+
+
+def sanitize_tree(value: Any) -> Any:
+    """Recursively code-point-sanitize every string leaf of an error structure.
+
+    A whole-envelope backstop: every ``str`` leaf (``message``, ``field``,
+    ``allowed_values``, ``hint``, ``candidates``, ``next_commands[*].arguments.*``,
+    ``_meta`` strings, batch-row fields) is run through :func:`sanitize_message`, so no
+    forbidden code point survives on any error surface regardless of which builder
+    produced it. Non-string leaves (ints, bools, ``None``) pass through unchanged.
+    MUST be applied only to error envelopes / error rows, never to success payloads.
+    """
+    if isinstance(value, str):
+        return sanitize_message(value)
+    if isinstance(value, dict):
+        return {key: sanitize_tree(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [sanitize_tree(item) for item in value]
+    return value
