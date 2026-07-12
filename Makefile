@@ -1,7 +1,7 @@
 .PHONY: help install lock upgrade sync \
         format format-check lint lint-ci lint-fix lint-loc \
         typecheck test test-fast test-unit test-integration test-cov \
-        check ci-local precommit clean verify-deploy \
+        check check-action-pins ci-local precommit clean verify-deploy \
         data data-refresh data-status dev mcp-serve \
         docker-build docker-up docker-down docker-logs docker-url info
 
@@ -62,7 +62,10 @@ test-cov: ## Run tests with coverage
 
 check: format lint ## Format and lint
 
-ci-local: format-check lint-ci lint-loc typecheck test-fast ## Fast local CI-equivalent checks
+check-action-pins: ## Require GitHub Actions to use audited full commit SHAs
+	uv run python scripts/check_github_action_pins.py
+
+ci-local: format-check lint-ci lint-loc typecheck check-action-pins test-fast ## Fast local CI-equivalent checks
 
 precommit: ci-local ## Run checks expected before commit
 

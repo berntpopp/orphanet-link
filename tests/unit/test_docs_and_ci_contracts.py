@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +19,29 @@ def test_ci_typecheck_is_strict_and_uses_local_make_gate() -> None:
     workflow = _read(".github/workflows/ci.yml")
     assert "continue-on-error" not in workflow
     assert re.search(r"run:\s*make (?:typecheck|ci-local)\b", workflow)
+
+
+def test_github_action_pin_check_recurses_and_rejects_version_tags(tmp_path: Path) -> None:
+    """The action pin gate must inspect nested workflows and composite actions."""
+    actions = tmp_path / ".github" / "actions" / "setup"
+    actions.mkdir(parents=True)
+    workflow = actions / "action.yml"
+    workflow.write_text(
+        "runs:\n  using: composite\n  steps:\n    - uses: astral-sh/setup-uv@v6 # v6\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(  # noqa: S603 -- invokes the repository's checked-in verifier.
+        [sys.executable, "scripts/check_github_action_pins.py", "--root", str(tmp_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert ".github/actions/setup/action.yml:4" in result.stdout
+    assert "must use a full 40-character commit SHA" in result.stdout
 
 
 def test_transport_docs_route_router_mcp_through_unified_only() -> None:
