@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-07-12
+
+### Security
+
+- Pinned every third-party GitHub Action to an audited full commit SHA, added a
+  recursive workflow/composite-action pin check, and configured Dependabot to
+  keep GitHub Action updates reviewable. Research use only.
+
 ## [0.3.2] - 2026-07-11
 
 ### Security
