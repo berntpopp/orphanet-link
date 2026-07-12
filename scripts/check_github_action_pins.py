@@ -31,7 +31,13 @@ def _validate_file(root: Path, path: Path) -> list[str]:
         if match is None:
             continue
         reference = match.group("reference")
-        if reference.startswith(("./", "docker://")):
+        if reference.startswith("./"):
+            continue
+        if reference.startswith("docker://"):
+            violations.append(
+                f"{path.relative_to(root)}:{line_number}: {reference}: Docker actions are not "
+                "permitted because this verifier cannot audit image digests"
+            )
             continue
         _, separator, revision = reference.rpartition("@")
         if not separator or not SHA_RE.fullmatch(revision):

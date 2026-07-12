@@ -44,6 +44,28 @@ def test_github_action_pin_check_recurses_and_rejects_version_tags(tmp_path: Pat
     assert "must use a full 40-character commit SHA" in result.stdout
 
 
+def test_github_action_pin_check_rejects_mutable_docker_actions(tmp_path: Path) -> None:
+    """Docker action images are mutable unless they are separately digest-checked."""
+    workflow_dir = tmp_path / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "ci.yml").write_text(
+        "jobs:\n  verify:\n    steps:\n      - uses: docker://alpine:latest\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(  # noqa: S603 -- invokes the repository's checked-in verifier.
+        [sys.executable, "scripts/check_github_action_pins.py", "--root", str(tmp_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert ".github/workflows/ci.yml:4" in result.stdout
+    assert "Docker actions are not permitted" in result.stdout
+
+
 def test_transport_docs_route_router_mcp_through_unified_only() -> None:
     """Router-facing docs distinguish unified MCP from REST-only http mode."""
     env_example = _read(".env.example")
