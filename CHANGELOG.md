@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-07-13
+
+### Fixed
+
+- Re-pin the reusable container CI and container release callers to the
+  corrected GeneFoundry router release standard
+  (`58d011d9c72efe90337244342fdec703f2b5b4b9`), which repairs seven latent
+  defects in the previously pinned revision that prevented the container
+  release workflow from completing. Research use only.
+
+### Changed
+
+- Bump `actions/checkout` from v5.0.1 to v7.0.0
+  (`9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0`) and `softprops/action-gh-release`
+  from v3.0.1 to v3.0.2 (`3d0d9888cb7fd7b750713d6e236d1fcb99157228`) in the
+  data-build workflow, keeping both SHA-pinned. Supersedes Dependabot #18 and
+  #16.
+
 ## [0.3.4] - 2026-07-13
 
 ### Added
