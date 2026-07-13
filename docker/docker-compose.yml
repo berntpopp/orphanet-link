@@ -33,7 +33,7 @@ services:
       ORPHANET_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1"]'
       ORPHANET_LINK_LOG_LEVEL: INFO
       ORPHANET_LINK_LOG_FORMAT: json
-      ORPHANET_LINK_DATA__DATA_DIR: /app/data
+      ORPHANET_LINK_DATA__DATA_DIR: /data
       ORPHANET_LINK_DATA__AUTO_BOOTSTRAP: "true"
       # Refresh is owned by the CI artifact pipeline + external cron.
       # To refresh the running container, run a host cron job:
@@ -44,7 +44,7 @@ services:
       ORPHANET_LINK_DATA__REFRESH_ENABLED: "false"
     volumes:
       # Persist the SQLite database across container restarts.
-      - orphanet-data:/app/data
+      - orphanet-data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://127.0.0.1:8000/health"]
       interval: 30s
@@ -55,20 +55,15 @@ services:
     # Container & Deployment Hardening Standard v1 (backported so running the base
     # file directly is still safe). The SQLite database lives on the `orphanet-data`
     # named volume (writable); the rootfs is read-only and scratch is an explicit,
-    # size-capped tmpfs (TMPDIR=/tmp/orphanet-link in the image).
+    # size-capped tmpfs.
     read_only: true
     tmpfs:
-      - /tmp/orphanet-link:rw,noexec,nosuid,size=512m,mode=1777
+      - /tmp:rw,noexec,nosuid,size=512m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     init: true
-    # Limits in both forms: deploy.resources (honored by Compose v2) and the
-    # non-swarm keys (honored by legacy docker-compose) so they apply either way.
-    mem_limit: 1g
-    cpus: 1.0
-    pids_limit: 256
     deploy:
       resources:
         limits:
@@ -80,13 +75,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - orphanet-network
 
 volumes:
   orphanet-data:
     driver: local
-
-networks:
-  orphanet-network:
-    driver: bridge

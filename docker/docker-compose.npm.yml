@@ -29,7 +29,7 @@ services:
       - 'ORPHANET_LINK_ALLOWED_HOSTS=["localhost","127.0.0.1","::1","orphanet-link.genefoundry.org"]'
       - ORPHANET_LINK_LOG_LEVEL=${LOG_LEVEL_API:-INFO}
       - ORPHANET_LINK_LOG_FORMAT=json
-      - ORPHANET_LINK_DATA__DATA_DIR=/app/data
+      - ORPHANET_LINK_DATA__DATA_DIR=/data
       # Fetch prebuilt DB from GitHub Release on first boot (persisted in the volume).
       - ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true
       - ORPHANET_LINK_DATA__PREFER_PREBUILT=true
@@ -49,11 +49,11 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      # TMPDIR=/tmp/orphanet-link (set in the image) - download/build scratch space.
-      - /tmp/orphanet-link:rw,noexec,nosuid,size=512m,mode=1777
+      # TMPDIR=/tmp (set in the image) - download/build scratch space.
+      - /tmp:rw,noexec,nosuid,size=512m,mode=1777
     volumes:
       # Persist the Orphanet SQLite database across container restarts.
-      - orphanet-data:/app/data
+      - orphanet-data:/data
     networks:
       - orphanet_link_internal_net
       - npm_proxy_network
