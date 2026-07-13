@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-07-13
+
+### Added
+
+- Adopt the GeneFoundry router container-release standard with SHA-pinned
+  reusable container CI/release callers, digest-only production image
+  configuration, code-only Docker context controls, and complete OCI image
+  labels.
+
 ## [0.3.3] - 2026-07-12
 
 ### Security
