@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-07-13
+
+### Fixed
+
+- **Signed release evidence now states the data contract this service actually declares.**
+  The reusable release workflow hardcoded `--contract data-independent` and a fixed
+  `data_requirements: {"mode":"none"}`, so every published manifest claimed the image binds
+  to no data at all — while `container-release.json` declares `data-bound` /
+  `external-reference` against the immutable Orphanet bundle
+  (`data-1.3.42-4.1.8-2025-03-03`,
+  `sha256:a8af3fc39cca2acedd12c188cb0e1f907ac320e73d2b965c17ad5a28c5f5fe38`). Because the
+  evidence assembler returns early for a data-independent contract, the strongest assertion
+  in the chain — that the definition evidence binds to the exact pinned artifact — was
+  silently skipped. Re-pinning the container-release standard to
+  `86b11f7ed062ed84dfddcbd309e34da88f3dae5b` sources the contract and the exact data
+  identity from `container-release.json`, so the manifest states the real binding and the
+  assertion runs. The v0.3.5 image and its attestations are sound; only its evidence
+  understated the binding, and regenerating that evidence requires this patch re-release.
+
 ## [0.3.5] - 2026-07-13
 
 ### Fixed
