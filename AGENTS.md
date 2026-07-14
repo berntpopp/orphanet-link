@@ -174,17 +174,37 @@ responsibility, not by layer, when approaching the limit.
 
 ---
 
+## Development commands
+
+```bash
+make install        # uv sync --group dev
+make format         # ruff format
+make lint           # ruff check
+make typecheck      # mypy --strict
+make test           # pytest (unit only)
+make test-integration  # live Orphadata / GitHub Release tests
+make test-cov       # pytest with coverage report
+make ci-local       # the full gate (below)
+make help           # every target, self-documenting
+```
+
+Data (`make data-fetch` / `data` / `data-status` / `data-refresh`), server (`make dev`,
+`make mcp-serve`) and Docker (`make docker-*`) targets are documented in
+`docs/data.md` and `docs/deployment.md`.
+
 ## CI gates (`make ci-local`)
 
 ```
-format-check   ruff format --check
-lint-ci        ruff check  (GitHub-Actions output)
-lint-loc       scripts/check_file_size.py  (hard cap: ≤500 lines/file)
-typecheck      mypy --strict
-test-fast      pytest -n auto (unit only), coverage fail_under = 80
+format-check      ruff format --check
+lint-ci           ruff check  (GitHub-Actions output)
+lint-loc          scripts/check_file_size.py  (hard cap: ≤500 lines/file)
+lint-readme       scripts/check_readme.py  (GeneFoundry README Standard v1)
+typecheck         mypy --strict
+check-action-pins scripts/check_github_action_pins.py  (full 40-char SHAs)
+test-fast         pytest -n auto (unit only), coverage fail_under = 80
 ```
 
-All five gates must be green before merge. After a redeploy, also run:
+All gates must be green before merge. After a redeploy, also run:
 
 ```bash
 make verify-deploy URL=<server>/health
@@ -206,6 +226,9 @@ A piece of work is done when ALL of the following are true:
       across all `response_mode` values (checked by `test_output_schemas.py`)
 - [ ] `mcp/capabilities.py::TOOLS` lists every registered tool (checked by
       `test_tool_names.py`)
+- [ ] The README `## Tools` table lists every registered tool (checked by
+      `test_readme_tools.py`); the README stays within the GeneFoundry README
+      Standard v1 (`make lint-readme`) — move detail into `docs/`, never delete it
 - [ ] New parsers use `lxml.iterparse` + `clear()` and are covered by a fixture
       XML sample in `tests/fixtures/`
 - [ ] No new file exceeds 500 lines (`lint-loc`)
@@ -306,4 +329,11 @@ mcp_server.py            # stdio bootstrap (sets FASTMCP_*/NO_COLOR before impor
 scripts/
   check_file_size.py
   check_deployed_freshness.py
+  check_github_action_pins.py
+  check_readme.py            # fleet-shared README linter; vendored VERBATIM — do not edit
 ```
+
+Repository docs live in `docs/`: [`data.md`](docs/data.md) (sources, build pipeline,
+licensing), [`deployment.md`](docs/deployment.md) (transports, Docker, Host/Origin/CORS,
+router integration), [`configuration.md`](docs/configuration.md) (`ORPHANET_LINK_*`), and
+[`architecture.md`](docs/architecture.md) (envelope, response modes, resources).

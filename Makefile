@@ -1,5 +1,5 @@
 .PHONY: help install lock upgrade sync \
-        format format-check lint lint-ci lint-fix lint-loc \
+        format format-check lint lint-ci lint-fix lint-loc lint-readme \
         typecheck test test-fast test-unit test-integration test-cov \
         check check-action-pins ci-local precommit clean verify-deploy \
         data data-refresh data-status dev mcp-serve \
@@ -42,6 +42,9 @@ lint-fix: ## Lint and apply safe fixes
 lint-loc: ## Enforce per-file line budget
 	uv run python scripts/check_file_size.py
 
+lint-readme: ## Enforce the GeneFoundry README Standard v1
+	uv run python scripts/check_readme.py
+
 typecheck: ## Type check package
 	uv run mypy orphanet_link server.py mcp_server.py
 
@@ -65,7 +68,7 @@ check: format lint ## Format and lint
 check-action-pins: ## Require GitHub Actions to use audited full commit SHAs
 	uv run python scripts/check_github_action_pins.py
 
-ci-local: format-check lint-ci lint-loc typecheck check-action-pins test-fast ## Fast local CI-equivalent checks
+ci-local: format-check lint-ci lint-loc lint-readme typecheck check-action-pins test-fast ## Fast local CI-equivalent checks
 
 precommit: ci-local ## Run checks expected before commit
 

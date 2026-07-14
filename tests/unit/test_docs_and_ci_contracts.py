@@ -67,19 +67,48 @@ def test_github_action_pin_check_rejects_mutable_docker_actions(tmp_path: Path) 
 
 
 def test_transport_docs_route_router_mcp_through_unified_only() -> None:
-    """Router-facing docs distinguish unified MCP from REST-only http mode."""
+    """Router-facing docs distinguish unified MCP from REST-only http mode.
+
+    Under README Standard v1 the deployment runbook lives in docs/deployment.md,
+    so the contract is asserted there *and* the README must link to it — a reader
+    who starts at the front door still reaches the footgun.
+    """
     env_example = _read(".env.example")
     readme = _read("README.md")
+    deployment = _read("docs/deployment.md")
     router_snippet = _read("docs/router/servers.yaml.snippet")
 
     assert "http (FastAPI REST/health only; no MCP endpoint)" in env_example
-    assert "Router deployments must run `--transport unified`" in readme
+    assert "Router deployments must run `--transport unified`" in deployment
     assert "`--transport unified` deployment" in router_snippet
+
+    # The README must warn about the mode split and route the reader to the runbook.
+    # Whitespace-normalised so the assertion survives a re-wrap of the paragraph.
+    readme_flat = " ".join(readme.split())
+    assert "(docs/deployment.md)" in readme
+    assert "`--transport http` is REST/health-only" in readme_flat
 
 
 def test_readme_places_research_warning_in_discovery_not_every_payload() -> None:
-    """README must not claim ordinary payloads carry a clinical-use flag."""
+    """Ordinary payloads must never be claimed to carry a clinical-use flag.
+
+    The design divergence (warning surfaced through discovery, not stamped on every
+    payload) is documented in docs/architecture.md; the README keeps the
+    above-the-fold callout and links there.
+    """
     readme = _read("README.md")
-    assert "Every payload carries an `unsafe_for_clinical_use` signal" not in readme
+    architecture = _read("docs/architecture.md")
+    false_claim = "Every payload carries an `unsafe_for_clinical_use` signal"
+
+    assert false_claim not in readme
+    assert false_claim not in architecture
+
+    # The discovery surfaces that do carry the warning are named where it is documented.
+    assert "`get_server_capabilities`" in architecture
+    assert "`orphanet://research-use`" in architecture
     assert "`get_server_capabilities`" in readme
-    assert "`orphanet://research-use`" in readme
+
+    # The README keeps the research-use callout above the fold and links to the contract.
+    assert "> [!IMPORTANT]" in readme
+    assert "Research use only. Not clinical decision support." in readme
+    assert "(docs/architecture.md)" in readme
