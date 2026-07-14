@@ -120,14 +120,23 @@ async def _probe(tool: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     args = _example_args(tool)
     assert args is not None, f"{tool.name}: unprobeable — a required parameter has no `examples`"
     attempts: list[dict[str, Any]] = []
+    first_ok: tuple[dict[str, Any], dict[str, Any]] | None = None
     for index in range(_MAX_EXAMPLES):
         candidate = _example_args(tool, index)
         if candidate is None or candidate in attempts:
             break
         attempts.append(candidate)
         payload = envelope(await tool.fn(**candidate))
-        if payload.get("success") is True:
+        if payload.get("success") is not True:
+            continue
+        # Prefer an example that actually returns records: a call that legitimately
+        # yields nothing satisfies every assertion below VACUOUSLY (0 == 0), which is
+        # how a payload-destroying bug hides from its own regression test.
+        if any(records for records in _collections(payload).values()):
             return candidate, payload
+        first_ok = first_ok or (candidate, payload)
+    if first_ok is not None:
+        return first_ok
     raise AssertionError(
         f"{tool.name}: none of its advertised examples resolved against the fixture corpus "
         f"({attempts}) — the tool's `examples` do not describe a callable call."

@@ -10,7 +10,12 @@ from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_ancestors, after_descendants, after_parents
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn
+from orphanet_link.mcp.tools._common import (
+    GroupingTermStr,
+    ResponseMode,
+    TermStr,
+    ToolReturn,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -107,7 +112,7 @@ def register_classification_tools(mcp: FastMCP) -> None:
         ),
     )
     async def get_disease_descendants(
-        term: TermStr,
+        term: GroupingTermStr,
         limit: _ClosureLimit = 200,
         offset: _ClosureOffset = 0,
         response_mode: ResponseMode = "compact",
