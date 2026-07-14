@@ -8,6 +8,7 @@ message.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -15,6 +16,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 from pydantic import ValidationError as PydanticValidationError
 
 from orphanet_link.exceptions import (
@@ -353,13 +356,43 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     return {k: v for k, v in meta.items() if k != "elapsed_ms"}
 
 
+def error_result(envelope: dict[str, Any]) -> ToolResult:
+    """Wrap an error envelope so it carries BOTH the structure and MCP's ``isError``.
+
+    Response-Envelope Standard v1: *"isError: true is REQUIRED so clients surface the
+    error to the model for self-correction."* A tool that RETURNS a dict can never set
+    it (fastmcp/tools/base.py builds the ToolResult with ``is_error`` defaulted false),
+    so every error envelope this server returned was delivered to the client as a
+    SUCCESSFUL call carrying ``success: false`` -- a client branching on ``isError``,
+    as the protocol tells it to, saw nothing wrong.
+
+    Raising instead is NOT the fix: FastMCP's raise path sets ``isError`` but discards
+    ``structuredContent`` entirely, which would throw away the machine-readable
+    envelope (error_code, field, allowed_values, next_commands) the model needs to
+    self-correct. Returning a ``ToolResult`` is the only shape that gives us both.
+
+    The TextContent mirror is kept in step with ``structured_content`` so neither
+    caller-visible surface disagrees with the other.
+    """
+    return ToolResult(
+        structured_content=envelope,
+        content=[TextContent(type="text", text=json.dumps(envelope))],
+        is_error=True,
+    )
+
+
 async def run_mcp_tool(
     tool_name: str,
     call: Callable[[], Awaitable[dict[str, Any]]],
     *,
     context: McpErrorContext | None = None,
-) -> dict[str, Any]:
-    """Execute a tool body, returning the result dict or a structured error dict."""
+) -> dict[str, Any] | ToolResult:
+    """Execute a tool body.
+
+    Returns the result dict on success, or -- on failure -- a ``ToolResult`` carrying
+    the structured error envelope AND ``isError: true`` (never a bare dict, which
+    cannot set the protocol flag; never a raise, which would discard the envelope).
+    """
     ctx = context or McpErrorContext(tool_name=tool_name)
     start = time.perf_counter()
     try:
@@ -401,4 +434,4 @@ async def run_mcp_tool(
         # Whole-envelope code-point backstop over EVERY string leaf (message, field,
         # allowed_values, hint, candidates, replaced_by, next_commands arguments, _meta)
         # so no forbidden code point survives on any error surface, whatever built it.
-        return cast("dict[str, Any]", sanitize_tree(envelope))
+        return error_result(cast("dict[str, Any]", sanitize_tree(envelope)))

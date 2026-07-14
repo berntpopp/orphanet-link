@@ -18,6 +18,7 @@ from orphanet_link.mcp.tools._common import (
     QueryStr,
     ResponseMode,
     TermStr,
+    ToolReturn,
 )
 from orphanet_link.mcp.untrusted_fencing import (
     UntrustedText,
@@ -48,7 +49,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
     )
     async def resolve_disease(
         query: QueryStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().resolve_disease(query, response_mode=response_mode)
             payload.setdefault("_meta", {})["next_commands"] = after_resolve_disease(payload)
@@ -87,7 +88,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
             bool, Field(description="Include obsolete terms (default false).")
         ] = False,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().search_diseases(
                 query,
@@ -136,7 +137,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
         include: IncludeArg = None,
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease(
                 term, response_mode=response_mode, fields=fields, include=include

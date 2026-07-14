@@ -18,6 +18,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from orphanet_link.services.orphanet_service import OrphanetService
+from tests.unit._envelope import envelope
 
 # Fixture facts (see tests/conftest.py + tests/fixtures/):
 _ORPHA_KIF7 = "ORPHA:166024"  # classification child of 93419, child of root 156
@@ -34,7 +35,7 @@ async def _tools(facade: FastMCP) -> dict[str, Any]:
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
     tools = await _tools(facade)
-    result: dict[str, Any] = await tools[name].fn(**kwargs)
+    result: dict[str, Any] = envelope(await tools[name].fn(**kwargs))
     return result
 
 

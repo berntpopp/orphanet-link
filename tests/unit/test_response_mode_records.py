@@ -38,6 +38,7 @@ from fastmcp import FastMCP
 
 from orphanet_link.mcp.facade import create_orphanet_mcp
 from orphanet_link.services.shaping import RESPONSE_MODES
+from tests.unit._envelope import envelope
 
 
 def _registered_tool_names() -> list[str]:
@@ -124,7 +125,7 @@ async def _probe(tool: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         if candidate is None or candidate in attempts:
             break
         attempts.append(candidate)
-        payload = await tool.fn(**candidate)
+        payload = envelope(await tool.fn(**candidate))
         if payload.get("success") is True:
             return candidate, payload
     raise AssertionError(
@@ -162,7 +163,7 @@ async def test_response_mode_preserves_every_record(
         pytest.skip(f"{tool_name} takes no response_mode")
 
     args, default = await _probe(tool)
-    shaped = await tool.fn(**args, response_mode=mode)
+    shaped = envelope(await tool.fn(**args, response_mode=mode))
     assert shaped.get("success") is True, f"{tool_name}: response_mode={mode!r} failed: {shaped}"
 
     baseline = _collections(default)
@@ -210,7 +211,7 @@ async def test_minimal_keeps_the_zero_versus_n_signal(facade: FastMCP, tool_name
         pytest.skip(f"{tool_name} takes no response_mode")
 
     args, default = await _probe(tool)
-    minimal = await tool.fn(**args, response_mode="minimal")
+    minimal = envelope(await tool.fn(**args, response_mode="minimal"))
     for key in ("count", "total"):
         if key in default:
             assert minimal.get(key) == default[key], (

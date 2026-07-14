@@ -17,6 +17,8 @@ from typing import Any
 import pytest
 from fastmcp import FastMCP
 
+from tests.unit._envelope import envelope
+
 _ORPHA_KIF7 = "ORPHA:166024"  # has KIF7 gene, OMIM xref, prevalence
 _ORPHA_58 = "ORPHA:58"  # Alexander disease, 2 phenotypes
 
@@ -26,7 +28,7 @@ async def _tools(facade: FastMCP) -> dict[str, Any]:
 
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
-    return await (await _tools(facade))[name].fn(**kwargs)
+    return envelope(await (await _tools(facade))[name].fn(**kwargs))
 
 
 # --- P1.1: one-call composed record -------------------------------------------

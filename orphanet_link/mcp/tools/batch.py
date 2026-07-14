@@ -20,7 +20,7 @@ from orphanet_link.mcp.envelope import McpErrorContext, classify_exception, run_
 from orphanet_link.mcp.next_commands import after_get_disease_batch, after_resolve_batch
 from orphanet_link.mcp.schemas import BATCH_DISEASE_SCHEMA, BATCH_RESOLVE_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode
+from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode, ToolReturn
 from orphanet_link.mcp.untrusted_content import sanitize_tree
 from orphanet_link.mcp.untrusted_fencing import (
     UntrustedText,
@@ -109,7 +109,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
             ),
         ],
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             _require_batch(queries, "queries")
             svc = get_orphanet_service()
@@ -159,7 +159,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
         ],
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             _require_batch(terms, "terms")
             svc = get_orphanet_service()

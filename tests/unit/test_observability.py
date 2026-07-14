@@ -16,6 +16,7 @@ import pytest
 from fastmcp import FastMCP
 
 from orphanet_link.mcp import metrics
+from tests.unit._envelope import envelope
 
 _ORPHA_KIF7 = "ORPHA:166024"
 
@@ -25,7 +26,7 @@ async def _tools(facade: FastMCP) -> dict[str, Any]:
 
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
-    return await (await _tools(facade))[name].fn(**kwargs)
+    return envelope(await (await _tools(facade))[name].fn(**kwargs))
 
 
 # --- P5.2: response_mode distribution -----------------------------------------

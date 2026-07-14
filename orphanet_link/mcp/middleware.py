@@ -11,14 +11,13 @@ dispatch and discloses any rewrite under ``_meta.argument_aliases_applied``.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
 from fastmcp.exceptions import ValidationError as FastMCPValidationError
 from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools.tool import ToolResult
-from mcp.types import CallToolRequestParams, TextContent
+from mcp.types import CallToolRequestParams
 from pydantic import ValidationError as PydanticValidationError
 
 from orphanet_link.mcp.arg_help import (
@@ -28,7 +27,7 @@ from orphanet_link.mcp.arg_help import (
     normalize_alias_args,
     tool_signature,
 )
-from orphanet_link.mcp.envelope import build_arg_error_envelope
+from orphanet_link.mcp.envelope import build_arg_error_envelope, error_result
 from orphanet_link.mcp.untrusted_content import sanitize_tree
 
 logger = logging.getLogger(__name__)
@@ -120,7 +119,9 @@ class ArgValidationMiddleware(Middleware):
         # type). The offending argument NAME is caller-controlled, so it is never
         # written to the log sink -- the sanitized value still rides the envelope.field.
         logger.warning("mcp_arg_error tool=%s type=%s", name, error_type)
-        return ToolResult(
-            structured_content=envelope,
-            content=[TextContent(type="text", text=json.dumps(envelope))],
-        )
+        # is_error=True: an argument-binding failure IS an error, and a client that
+        # branches on MCP's isError must see one. FastMCP's own default for a failed
+        # pydantic validation is already isError=true -- this middleware was CATCHING
+        # that and handing back a plain (isError-false) result, so reshaping the
+        # failure into a useful envelope was silently downgrading it to a success.
+        return error_result(envelope)

@@ -25,7 +25,7 @@ from orphanet_link.mcp.schemas import (
     FIND_BY_PHENOTYPE_SCHEMA,
 )
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr
+from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -54,7 +54,7 @@ def register_association_tools(mcp: FastMCP) -> None:
     )
     async def get_disease_genes(
         term: TermStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease_genes(term, response_mode=response_mode)
             payload.setdefault("_meta", {})["next_commands"] = after_genes(payload)
@@ -93,7 +93,7 @@ def register_association_tools(mcp: FastMCP) -> None:
             ),
         ] = None,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease_phenotypes(
                 term, frequency=frequency, response_mode=response_mode
@@ -123,7 +123,7 @@ def register_association_tools(mcp: FastMCP) -> None:
     )
     async def get_disease_prevalence(
         term: TermStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease_prevalence(
                 term, response_mode=response_mode
@@ -153,7 +153,7 @@ def register_association_tools(mcp: FastMCP) -> None:
     )
     async def get_disease_natural_history(
         term: TermStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease_natural_history(
                 term, response_mode=response_mode
@@ -188,7 +188,7 @@ def register_association_tools(mcp: FastMCP) -> None:
     )
     async def get_disease_disability(
         term: TermStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease_disability(
                 term, response_mode=response_mode
@@ -227,7 +227,7 @@ def register_association_tools(mcp: FastMCP) -> None:
         limit: _ClosureLimit = 50,
         offset: _ClosureOffset = 0,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().find_diseases_by_gene(
                 gene_symbol, limit=limit, offset=offset, response_mode=response_mode
@@ -268,7 +268,7 @@ def register_association_tools(mcp: FastMCP) -> None:
         limit: _ClosureLimit = 50,
         offset: _ClosureOffset = 0,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().find_diseases_by_phenotype(
                 hpo_id, limit=limit, offset=offset, response_mode=response_mode

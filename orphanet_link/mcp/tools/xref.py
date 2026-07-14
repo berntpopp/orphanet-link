@@ -11,7 +11,7 @@ from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_cross_ontology, after_resolve_xref
 from orphanet_link.mcp.schemas import CROSS_ONTOLOGY_SCHEMA, RESOLVE_XREF_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr, XrefIdStr
+from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn, XrefIdStr
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -44,7 +44,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
             int, Field(ge=0, description="Rows to skip for forward paging (default 0).")
         ] = 0,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().resolve_xref(
                 xref_id, limit=limit, offset=offset, response_mode=response_mode
@@ -85,7 +85,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
             ),
         ] = None,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().map_cross_ontology(
                 term, prefixes=prefixes, response_mode=response_mode

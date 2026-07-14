@@ -14,6 +14,7 @@ from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import DISCOVERY_PLACEHOLDER_QUERY, after_capabilities, cmd
 from orphanet_link.mcp.schemas import CAPABILITIES_SCHEMA, DIAGNOSTICS_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
+from orphanet_link.mcp.tools._common import ToolReturn
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -42,7 +43,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
             Literal["summary", "full"],
             Field(description="summary (default, light) or full (adds policy notes)."),
         ] = "summary",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             signatures = await collect_tool_signatures(mcp)
             payload = project_capabilities(detail, signatures)
@@ -71,7 +72,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
             "Signature: get_diagnostics()."
         ),
     )
-    async def get_diagnostics() -> dict[str, Any]:
+    async def get_diagnostics() -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_diagnostics()
             payload["build"] = build_info()

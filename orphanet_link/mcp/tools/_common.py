@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
+from fastmcp.tools.tool import ToolResult
 from pydantic import Field
+
+#: What every tool body returns. The happy path is the plain envelope dict (FastMCP
+#: serialises it into ``structuredContent``); the ERROR path is a ``ToolResult`` so the
+#: envelope can also carry MCP's ``isError: true``. A returned dict can never set
+#: ``isError``, and a client that branches on it would read an error envelope as a
+#: SUCCESSFUL call -- see :func:`orphanet_link.mcp.envelope.run_mcp_tool`.
+ToolReturn = dict[str, Any] | ToolResult
 
 ResponseMode = Annotated[
     Literal["minimal", "compact", "standard", "full"],

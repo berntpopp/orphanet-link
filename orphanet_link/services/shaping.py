@@ -153,9 +153,7 @@ def _is_collection(value: Any) -> bool:
     if isinstance(value, list):
         return True
     return (
-        isinstance(value, dict)
-        and bool(value)
-        and all(isinstance(v, list) for v in value.values())
+        isinstance(value, dict) and bool(value) and all(isinstance(v, list) for v in value.values())
     )
 
 

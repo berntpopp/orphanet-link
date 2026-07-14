@@ -29,6 +29,8 @@ import jsonschema  # type: ignore[import-untyped]
 import pytest
 from fastmcp import FastMCP
 
+from tests.unit._envelope import envelope
+
 # Fixture disorders (present in the tiny test database built by conftest._build_db):
 #   ORPHA:166024 -> KIF7-associated disease, xref OMIM:607131
 #   ORPHA:58     -> "Alexander disease", phenotype HP:0000256
@@ -175,7 +177,7 @@ async def test_success_output_validates_all_modes(facade: FastMCP) -> None:
             kwargs = dict(base_kwargs)
             if mode is not None:
                 kwargs["response_mode"] = mode
-            result = await tool.fn(**kwargs)
+            result = envelope(await tool.fn(**kwargs))
             label = name if mode is None else f"{name}[{mode}]"
             assert result.get("success") is True, f"{label}: expected success, got {result!r}"
             try:
@@ -196,7 +198,7 @@ async def test_error_envelope_validates(facade: FastMCP, tool_name: str) -> None
     assert tool_name in tools, f"error case references unknown tool {tool_name!r}"
     tool = tools[tool_name]
     case = _ERROR_CASES[tool_name]
-    result = await tool.fn(**case["kwargs"])
+    result = envelope(await tool.fn(**case["kwargs"]))
     assert result.get("success") is False, (
         f"{tool_name}: expected an error envelope, got {result!r}"
     )

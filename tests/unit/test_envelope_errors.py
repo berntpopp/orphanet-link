@@ -18,6 +18,7 @@ from orphanet_link.mcp.envelope import (
     run_mcp_tool,
 )
 from orphanet_link.services.shaping import shape_search_hit
+from tests.unit._envelope import envelope
 
 _SIG = "get_disease(term, response_mode=, fields=)"
 
@@ -91,10 +92,12 @@ async def test_not_found_with_suggestions_chains_to_candidates() -> None:
     async def call() -> dict[str, Any]:
         raise NotFoundError("no exact match", suggestions=[{"orpha_code": "58", "name": "A"}])
 
-    result = await run_mcp_tool(
-        "get_disease",
-        call,
-        context=McpErrorContext("get_disease", arguments={"term": "alexandr"}),
+    result = envelope(
+        await run_mcp_tool(
+            "get_disease",
+            call,
+            context=McpErrorContext("get_disease", arguments={"term": "alexandr"}),
+        )
     )
     assert result["error_code"] == "not_found"
     assert result["candidates"] == [{"orpha_code": "58", "name": "A"}]
@@ -109,10 +112,12 @@ async def test_explicit_fallback_is_used_as_next_command() -> None:
     async def call() -> dict[str, Any]:
         raise McpToolError(error_code="internal_error", message="kaboom")
 
-    result = await run_mcp_tool(
-        "get_disease",
-        call,
-        context=McpErrorContext("get_disease", fallback=fallback),
+    result = envelope(
+        await run_mcp_tool(
+            "get_disease",
+            call,
+            context=McpErrorContext("get_disease", fallback=fallback),
+        )
     )
     assert result["error_code"] == "internal_error"
     assert result["_meta"]["next_commands"] == [fallback]
