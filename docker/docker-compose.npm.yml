@@ -8,15 +8,15 @@
 # prebuilt Orphanet SQLite database from the GitHub Release (or builds locally
 # from Orphadata XML) into the persisted data volume.
 #
-#   docker compose -f docker/docker-compose.npm.yml --env-file .env.docker up -d --build
+#   docker compose -f docker/docker-compose.npm.yml --env-file .env.docker up -d
 name: orphanet-link-npm
 
 services:
   orphanet_link:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      target: production
+    # Deploy pulls the released, attested image; it never builds from source.
+    # Pin a digest, not a tag: there is no `latest`, and only a digest is immutable.
+    image: ${ORPHANET_LINK_IMAGE:?Set ORPHANET_LINK_IMAGE to ghcr.io/berntpopp/orphanet-link@sha256:<digest>}
+    pull_policy: missing
     container_name: orphanet-link-npm
     # NO published host ports - NPM handles all routing via the container name.
     expose:
