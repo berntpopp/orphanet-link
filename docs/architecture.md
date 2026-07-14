@@ -49,8 +49,24 @@ forward-page step. Ordering is a stable, tested contract — see `AGENTS.md`.
 
 ## Error taxonomy
 
-Seven codes: `invalid_input`, `not_found`, `ambiguous_query`, `data_unavailable`,
-`rate_limited`, `upstream_unavailable`, `internal_error`.
+Eight codes: `invalid_input`, `not_found`, `ambiguous_query`, `data_unavailable`,
+`rate_limited`, `upstream_unavailable`, `limit_exceeded`, `internal_error`.
+
+Every error frame carries `retryable` and a `recovery_action` that tells a client
+which branch to take:
+
+| `recovery_action` | `retryable` | Codes |
+|---|---|---|
+| `retry_backoff` | `true` | `data_unavailable`, `rate_limited`, `upstream_unavailable` |
+| `reformulate_input` | `false` | `invalid_input`, `not_found`, `ambiguous_query`, `limit_exceeded` |
+| `switch_tool` | `false` | `internal_error` |
+
+`limit_exceeded` is a *client-fixable* error, not a fault: narrow the request (a
+smaller `limit`, a shorter batch) and call again.
+
+The list is `ERROR_CODES` in `orphanet_link/mcp/capabilities.py` — served to clients
+by `get_server_capabilities` and `orphanet://reference`. This section is tested
+against it (`tests/unit/test_docs_error_taxonomy.py`), so it cannot drift.
 
 ## Resources
 
