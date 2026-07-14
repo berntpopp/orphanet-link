@@ -68,9 +68,10 @@ def register_xref_tools(mcp: FastMCP) -> None:
         description=(
             "List an Orphanet disorder's cross-references to other ontologies, grouped "
             "by source (OMIM/MONDO/ICD-10/ICD-11/UMLS/GARD/MeSH/MedDRA), each with "
-            "its mapping relation. Optionally restrict to a subset of sources, or pass "
-            "fields=['xrefs.OMIM'] for a sparse projection. count is the number of leaf "
-            "mapping rows (individual targets), not the number of source groups. "
+            "its mapping relation. Returns them under `mappings` (get_disease returns "
+            "the same data under `xrefs`). Use prefixes=['OMIM'] to restrict to a "
+            "subset of sources. count is the number of leaf mapping rows (individual "
+            "targets), not the number of source groups. "
             "Signature: map_cross_ontology(term, prefixes=, response_mode=)."
         ),
     )

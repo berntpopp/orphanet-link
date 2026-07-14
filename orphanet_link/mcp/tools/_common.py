@@ -19,11 +19,26 @@ ResponseMode = Annotated[
     Field(description="Verbosity: minimal|compact|standard|full (default compact)."),
 ]
 
+#: Upper bound on any free-text identifier a caller may send. The longest disease label
+#: in Orphanet is well under 200 characters, so this rejects nothing real -- it exists
+#: because an UNBOUNDED string is echoed back (in ``query`` and again in
+#: ``_meta.next_commands``), so a pasted document costs the caller ~2x its own size in
+#: tokens for zero information. Declaring the bound (S5: "where a format is constrained,
+#: express it") makes the over-long call unrepresentable rather than merely wasteful:
+#: pydantic rejects it before the tool body runs, and the standard invalid_input envelope
+#: names the offending parameter WITHOUT echoing its value.
+MAX_TERM_CHARS = 256
+
+#: Upper bound for a short structured identifier (an HGNC symbol, an HPO id). Same
+#: reasoning as MAX_TERM_CHARS, tighter because the format is tighter.
+MAX_SYMBOL_CHARS = 64
+
 QueryStr = Annotated[
     str,
     Field(
         description="A disease label, synonym, or ORPHAcode (ORPHA:166024 or 166024).",
         examples=["Aicardi syndrome", "ORPHA:58", "ORPHA:166024"],
+        max_length=MAX_TERM_CHARS,
     ),
 ]
 
@@ -39,6 +54,7 @@ TermStr = Annotated[
         # less and leaves the gate probing empty result sets, which prove nothing.
         # The three forms a term may take are all shown.
         examples=["ORPHA:33069", "ORPHA:166024", "Dravet syndrome", "OMIM:607131"],
+        max_length=MAX_TERM_CHARS,
     ),
 ]
 
@@ -51,6 +67,7 @@ GroupingTermStr = Annotated[
         description="An ORPHAcode, label, or xref CURIE for a grouping/category term "
         "(a specific disease is a leaf and has no descendants).",
         examples=["ORPHA:699645", "ORPHA:156", "Variable age-onset epilepsy syndrome"],
+        max_length=MAX_TERM_CHARS,
     ),
 ]
 
@@ -60,6 +77,7 @@ XrefIdStr = Annotated[
         description="An external cross-reference CURIE (prefix:local), e.g. OMIM/MONDO/ICD-10, "
         "to resolve back to the Orphanet term(s) that map to it.",
         examples=["OMIM:607131", "MONDO:0006516", "ICD-10:Q78.6"],
+        max_length=MAX_TERM_CHARS,
     ),
 ]
 

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
 
-from orphanet_link.constants import HPO_FREQUENCIES
+from orphanet_link.constants import HPO_FREQUENCIES, HpoFrequency
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import (
@@ -16,7 +16,12 @@ from orphanet_link.mcp.next_commands import (
     after_simple_association,
 )
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn
+from orphanet_link.mcp.tools._common import (
+    MAX_SYMBOL_CHARS,
+    ResponseMode,
+    TermStr,
+    ToolReturn,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -75,11 +80,12 @@ def register_association_tools(mcp: FastMCP) -> None:
     async def get_disease_phenotypes(
         term: TermStr,
         frequency: Annotated[
-            str | None,
+            HpoFrequency | None,
             Field(
-                description="Filter by HPO frequency bucket; must be one of the Orphanet "
-                "frequency labels (e.g. 'Frequent (79-30%)') -- an unrecognised label is "
-                "rejected with invalid_input. Omit to return all.",
+                description="Filter by HPO frequency bucket. A CLOSED vocabulary (see the "
+                "enum): the label must match exactly, including its percentage range -- "
+                "'Frequent' is not 'Frequent (79-30%)'. An unrecognised label is rejected "
+                "with invalid_input, never silently matched to nothing. Omit to return all.",
                 examples=["Frequent (79-30%)", "Very frequent (99-80%)"],
             ),
         ] = None,
@@ -213,6 +219,7 @@ def register_association_tools(mcp: FastMCP) -> None:
             Field(
                 description="HGNC gene symbol, e.g. 'KIF7' or 'HNF1B'.",
                 examples=["KIF7", "HNF1B", "BRCA1"],
+                max_length=MAX_SYMBOL_CHARS,
             ),
         ],
         limit: _ClosureLimit = 50,
@@ -254,6 +261,8 @@ def register_association_tools(mcp: FastMCP) -> None:
             Field(
                 description="HPO term id, e.g. 'HP:0000256'.",
                 examples=["HP:0000256", "HP:0001250", "HP:0002015"],
+                pattern=r"^(HP:)?\d{7}$",
+                max_length=MAX_SYMBOL_CHARS,
             ),
         ],
         limit: _ClosureLimit = 50,

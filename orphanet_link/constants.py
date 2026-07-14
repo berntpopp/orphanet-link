@@ -7,6 +7,8 @@ once here and surfaced via capabilities + the ``orphanet://`` resources.
 
 from __future__ import annotations
 
+from typing import Literal, get_args
+
 #: Bumped whenever ``ingest/schema.sql`` changes shape. Stamped into ``meta`` and
 #: checked when loading a prebuilt database.
 SCHEMA_VERSION = 1
@@ -45,7 +47,14 @@ MAPPING_RELATION_RANK = {
 }
 
 #: HPO frequency labels (product 4), ordered most→least frequent.
-HPO_FREQUENCIES = [
+#:
+#: This is a CLOSED vocabulary, and the type is its single source of truth so the schema
+#: and the runtime cannot disagree. Declaring it as a ``Literal`` puts an ``enum`` in the
+#: advertised input schema (Tool-Schema Documentation Standard S4) -- without one, a model
+#: must GUESS the exact label, and a wrong guess ("Frequent" for "Frequent (79-30%)") is
+#: indistinguishable from a disorder that genuinely has no phenotypes at that frequency.
+#: An undeclared enum is what produces the silently-empty filter.
+HpoFrequency = Literal[
     "Obligate (100%)",
     "Very frequent (99-80%)",
     "Frequent (79-30%)",
@@ -53,6 +62,9 @@ HPO_FREQUENCIES = [
     "Very rare (<4-1%)",
     "Excluded (0%)",
 ]
+
+#: DERIVED from the type above -- never a second hand-maintained copy of the list.
+HPO_FREQUENCIES: list[str] = list(get_args(HpoFrequency))
 
 # --- License & attribution (Orphadata is CC BY 4.0) -------------------------
 
