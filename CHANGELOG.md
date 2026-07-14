@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-14
+
+MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2
+UNGATED tools to 0 failures and 0 UNGATED**, and the advertised tool surface fell from
+**9,913 to 6,081 tokens**. Every defect below was green in CI: none of them were visible
+to a unit-test suite that never spoke MCP to a running server, which is why the gate is
+now vendored in and run against the container on every PR.
+
+### Fixed
+
+- **CRITICAL — `response_mode="minimal"` discarded the entire payload and still reported
+  `success: true`.** It kept the identity anchors and nothing else, so
+  `get_disease_genes(term="ORPHA:33069", response_mode="minimal")` answered with no
+  `genes` and no `count` — byte-identical to a disorder that genuinely has no gene
+  associations. Reproduced on six tools (genes, phenotypes, prevalence, natural history,
+  classification, ancestors) and latent on every other shaped tool. `minimal` now returns
+  every collection with each record narrowed to its stable identifiers, plus `count` —
+  which is what Response-Envelope Standard v1 always said it was ("the mandatory envelope
+  plus **stable identifiers**"). An unregistered collection is kept WHOLE rather than
+  dropped, so the failure mode is now unrepresentable rather than merely fixed.
+- **Every error envelope carried `isError: false`.** A returned dict cannot set the MCP
+  protocol flag, so a client branching on `isError` — as the spec tells it to — read every
+  one of this server's errors as a *successful call*. Error envelopes now ride a
+  `ToolResult(is_error=True)`, which is the only shape that carries both the flag and the
+  machine-readable envelope (raising sets the flag but nulls `structuredContent`).
+- **`get_diagnostics` advertised an `outputSchema` naming six properties the server never
+  returns** (`term_count`, `obsolete_count`, `xref_count`, `mapping_count`,
+  `data_available`, `built_utc`). `additionalProperties: true` meant it still *validated*,
+  so the lie stayed invisible until an agent read `resp["term_count"]` and hit a KeyError.
+- **`map_cross_ontology`'s description promised a `fields=['xrefs.OMIM']` parameter that
+  the tool rejects**, and named a key (`xrefs`) it does not return (`mappings`). A model
+  that followed the description got a hard `invalid_input`. The description is now true;
+  a test scans every tool's prose for `arg=` promises its schema does not accept.
+- **`search_diseases` amplified junk 2x.** An unbounded `query` was echoed back in the
+  payload *and* again in `_meta.next_commands`: a 5,000-character query cost the caller a
+  10,405-character response for zero information. Free-text arguments now declare a
+  `maxLength`, so an over-long call is rejected (567 chars, value not echoed).
+
+### Changed
+
+- **BREAKING — `error_code` is now the closed Response-Envelope v1 enum**
+  (`invalid_input`, `not_found`, `ambiguous_query`, `upstream_unavailable`, `rate_limited`,
+  `internal`). Three codes of this server's own invention are folded onto the canon, so a
+  client written against the fleet contract finally has a branch for every error it can
+  receive:
+  `data_unavailable` → `upstream_unavailable` (still retryable, still chains to
+  `get_diagnostics`), `limit_exceeded` → `invalid_input` (client-fixable: narrow the
+  request), `internal_error` → `internal`.
+- **`outputSchema` is no longer advertised** (Tool-Surface Budget Standard v1, B2). It was
+  40% of a surface that every client re-sends on every request, for a field the MCP spec
+  makes optional and no model reads. `structuredContent` is unaffected — verified against
+  the running server. With `dereference_schemas=False`, the surface is **9,913t → 6,081t**;
+  no description was shortened (`doc%` stays 100).
+- **`get_disease_phenotypes.frequency` is now a declared `enum`** (S4). It was a bare
+  string over a closed 6-value vocabulary, so a model had to guess the exact label — and
+  the natural guess (`"Frequent"` for `"Frequent (79-30%)"`) is exactly the silently-empty
+  filter this standard exists to kill. It now rejects with `invalid_input`.
+- **The `term` examples name a disorder that actually has data.** The old example carried
+  no functional-consequence annotation, so `get_disease_disability` was gated against an
+  empty result; `get_disease_descendants` exampled a leaf disease, which can never *have*
+  descendants. Both now example terms that teach the model something true.
+
+### Added
+
+- **`resolve_disease_batch.queries` and `get_disease_batch.terms` carry `examples`** (S2/S3).
+  Without them, neither a model nor the behaviour gate could construct a valid call: both
+  tools shipped UNGATED — exercised by nobody.
+- **The Behaviour Conformance v1 gate is vendored and runs against the container in CI**
+  (`tests/conformance/behaviour.py`, byte-identical from `genefoundry-router`). Every probe
+  is derived from this server's own advertised schema, so a new tool is gated the day it
+  ships and a tool that cannot be probed FAILS rather than passing quietly.
+
+[#28]: https://github.com/berntpopp/orphanet-link/issues/28
+
 ## [0.3.7] - 2026-07-14
 
 ### Changed
