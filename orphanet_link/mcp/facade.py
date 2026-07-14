@@ -59,6 +59,12 @@ def create_orphanet_mcp() -> FastMCP:
         version=__version__,
         instructions=ORPHANET_SERVER_INSTRUCTIONS,
         mask_error_details=True,
+        # Tool-Surface Budget Standard v1 (B4). The constructor defaults this True and
+        # appends DereferenceRefsMiddleware, which inlines every $defs/$ref at every use
+        # site -- an amplifier of the surface every client re-sends on every request. It
+        # is free and safe to turn off here: 0 of orphanet-link's INPUT schemas contain a
+        # $ref, so no client's view of a tool's parameters changes.
+        dereference_schemas=False,
     )
     # Layer 5: scrub FastMCP-core / MCP-SDK validation + handler logs that would
     # echo the caller-supplied tool name / resource URI / prompt name (with any

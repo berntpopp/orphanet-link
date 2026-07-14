@@ -12,7 +12,6 @@ from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.capabilities import collect_tool_signatures, project_capabilities
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import DISCOVERY_PLACEHOLDER_QUERY, after_capabilities, cmd
-from orphanet_link.mcp.schemas import CAPABILITIES_SCHEMA, DIAGNOSTICS_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import ToolReturn
 
@@ -27,7 +26,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         name="get_server_capabilities",
         title="Get Server Capabilities",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=CAPABILITIES_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"discovery"},
         description=(
             "Return the orphanet-link discovery surface: identity/build/Orphanet release, "
@@ -60,7 +59,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         name="get_diagnostics",
         title="Get Orphanet Diagnostics",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=DIAGNOSTICS_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"discovery"},
         description=(
             "Report the local Orphanet index status: whether the data is built, the "

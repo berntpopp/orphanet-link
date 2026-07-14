@@ -18,7 +18,6 @@ from orphanet_link.exceptions import InvalidInputError
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, classify_exception, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_get_disease_batch, after_resolve_batch
-from orphanet_link.mcp.schemas import BATCH_DISEASE_SCHEMA, BATCH_RESOLVE_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode, ToolReturn
 from orphanet_link.mcp.untrusted_content import sanitize_tree
@@ -89,7 +88,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
         name="resolve_disease_batch",
         title="Resolve Diseases (batch)",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=BATCH_RESOLVE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "resolve", "batch"},
         description=(
             "Resolve many labels/ORPHAcodes/xrefs in one call (partial success: each "
@@ -138,7 +137,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
         name="get_disease_batch",
         title="Get Diseases (batch)",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=BATCH_DISEASE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "batch"},
         description=(
             "Fetch many disease records in one call (partial success per item: each "

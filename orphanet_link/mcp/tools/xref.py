@@ -9,7 +9,6 @@ from pydantic import Field
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_cross_ontology, after_resolve_xref
-from orphanet_link.mcp.schemas import CROSS_ONTOLOGY_SCHEMA, RESOLVE_XREF_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn, XrefIdStr
 
@@ -24,7 +23,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
         name="resolve_xref",
         title="Resolve Cross-Reference",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=RESOLVE_XREF_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"xref", "resolve"},
         description=(
             "Resolve an external cross-reference CURIE (OMIM/MONDO/ICD-10/ICD-11/"
@@ -64,7 +63,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
         name="map_cross_ontology",
         title="Map Cross-Ontology",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=CROSS_ONTOLOGY_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"xref"},
         description=(
             "List an Orphanet disorder's cross-references to other ontologies, grouped "
