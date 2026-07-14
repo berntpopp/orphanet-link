@@ -100,7 +100,14 @@ def register_batch_tools(mcp: FastMCP) -> None:
         ),
     )
     async def resolve_disease_batch(
-        queries: Annotated[list[str], Field(description=f"1..{MAX_BATCH} labels/ids/xrefs.")],
+        queries: Annotated[
+            list[str],
+            Field(
+                description=f"A LIST of 1..{MAX_BATCH} disease labels, ORPHAcodes or xref "
+                "CURIEs to resolve — one entry per item, not a comma-joined string.",
+                examples=[["ORPHA:58", "Alexander disease", "OMIM:607131"]],
+            ),
+        ],
         response_mode: ResponseMode = "compact",
     ) -> dict[str, Any]:
         async def call() -> dict[str, Any]:
@@ -142,7 +149,14 @@ def register_batch_tools(mcp: FastMCP) -> None:
         ),
     )
     async def get_disease_batch(
-        terms: Annotated[list[str], Field(description=f"1..{MAX_BATCH} ids/labels/xrefs.")],
+        terms: Annotated[
+            list[str],
+            Field(
+                description=f"A LIST of 1..{MAX_BATCH} ORPHAcodes, disease labels or xref "
+                "CURIEs to fetch — one entry per item, not a comma-joined string.",
+                examples=[["ORPHA:58", "ORPHA:166024", "OMIM:607131"]],
+            ),
+        ],
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
     ) -> dict[str, Any]:
