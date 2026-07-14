@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
 ## [0.3.7] - 2026-07-14
 
 ### Changed
@@ -16,8 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   name, the healthcheck (including the long first-boot `start_period`), networks and
   volumes are all preserved, so the deployed topology and the persisted Orphanet SQLite
   database are untouched.
-
-## [Unreleased]
 
 ## [0.3.6] - 2026-07-13
 
