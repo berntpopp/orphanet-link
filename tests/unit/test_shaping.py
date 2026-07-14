@@ -33,16 +33,76 @@ def test_response_modes_contains_expected():
 # -- minimal mode --------------------------------------------------------------
 
 
-def test_minimal_keeps_only_anchors():
+def test_minimal_keeps_the_anchors():
     result = shape(_SAMPLE, "minimal", anchors=_ANCHORS)
-    assert set(result.keys()) == {"orpha_code", "name", "orphanet_version"}
+    assert result["orpha_code"] == "166024"
+    assert result["name"] == "Acrocallosal syndrome"
+    assert result["orphanet_version"] == "1.3.42"
 
 
-def test_minimal_does_not_include_extra_fields():
+def test_minimal_drops_optional_detail_scalars():
+    """Record DETAIL is what minimal omits — free text and descriptive scalars."""
     result = shape(_SAMPLE, "minimal", anchors=_ANCHORS)
     assert "definition" not in result
-    assert "synonyms" not in result
-    assert "xrefs" not in result
+    assert "disorder_type" not in result
+
+
+def test_minimal_keeps_every_populated_collection():
+    """The regression: minimal narrows a record, it does NOT delete the collection.
+
+    ``shape(record, "minimal")`` used to keep the anchors and nothing else, so a tool
+    whose entire reason for existing is its collection answered with success:true and
+    an empty envelope (issue #28).
+    """
+    record = {
+        **_SAMPLE,
+        "genes": [
+            {"gene_symbol": "KIF7", "hgnc_id": "HGNC:30497", "association_type": "Disease-causing"}
+        ],
+        "count": 1,
+    }
+    result = shape(record, "minimal", anchors=_ANCHORS)
+    assert result["genes"] == [{"gene_symbol": "KIF7", "hgnc_id": "HGNC:30497"}], (
+        "minimal must return the gene rows narrowed to their stable identifiers"
+    )
+    assert result["count"] == 1
+
+
+def test_minimal_narrows_a_grouped_collection_but_keeps_it():
+    """``xrefs``/``mappings`` group their rows by source prefix — narrow, never delete."""
+    result = shape(_SAMPLE, "minimal", anchors=_ANCHORS)
+    assert result["xrefs"] == {"OMIM": [{"object_id": "607131"}]}
+
+
+def test_minimal_keeps_a_scalar_collection_verbatim():
+    """``synonyms`` is a list of strings: there is no field to project."""
+    result = shape(_SAMPLE, "minimal", anchors=_ANCHORS)
+    assert result["synonyms"] == ["ACS", "Schinzel syndrome"]
+
+
+def test_minimal_keeps_the_zero_versus_n_signal():
+    """``count`` survives even at 0 — it is what distinguishes "none" from "discarded"."""
+    result = shape({**_SAMPLE, "count": 0}, "minimal", anchors=_ANCHORS)
+    assert result["count"] == 0
+    assert "genes" not in result, "an EMPTY collection is dropped, exactly as compact drops it"
+
+
+def test_minimal_keeps_the_pagination_block():
+    record = {**_SAMPLE, "ancestors": [{"orpha_code": "93419", "name": "x"}], "total": 10}
+    result = shape(record, "minimal", anchors=_ANCHORS)
+    assert result["total"] == 10
+    assert result["ancestors"] == [{"orpha_code": "93419"}]
+
+
+def test_minimal_keeps_an_unregistered_collection_whole():
+    """Fail-open: a collection with no declared identifier is kept, never dropped.
+
+    A future payload key must not be able to reintroduce the silent-empty bug simply by
+    being forgotten in ``_ROW_IDENTIFIERS``. The worst it can do is cost tokens.
+    """
+    record = {**_SAMPLE, "brand_new_section": [{"a": 1, "b": 2}]}
+    result = shape(record, "minimal", anchors=_ANCHORS)
+    assert result["brand_new_section"] == [{"a": 1, "b": 2}]
 
 
 def test_minimal_preserves_meta_keys():
