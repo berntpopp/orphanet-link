@@ -93,10 +93,6 @@ line-ending = "lf"
 "tests/**/*" = ["S101", "S104", "S110", "T20", "B011", "SIM105", "SIM108"]
 "mcp_server.py" = ["T20"]
 "scripts/**/*" = ["T20"]
-# Vendored verbatim from genefoundry-router (fleet-shared README linter); it must
-# stay byte-identical across repos, so the zip() is exempted here instead of
-# patched. Its lengths are equal by the guard immediately above the call.
-"scripts/check_readme.py" = ["T20", "B905"]
 "orphanet_link/ingest/cli.py" = ["T20"]
 
 [tool.ruff.lint.pydocstyle]
