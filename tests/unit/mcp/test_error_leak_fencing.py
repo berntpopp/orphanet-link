@@ -124,7 +124,7 @@ async def test_data_unavailable_tool_severs_local_path(swap_service, facade) -> 
 
     for env in (sc, mirror):
         assert env["success"] is False
-        assert env["error_code"] == "data_unavailable"
+        assert env["error_code"] == "upstream_unavailable"
         assert HOST_ONLY_DIR not in json.dumps(env)
         _no_codepoints(json.dumps(env))
 
@@ -197,7 +197,7 @@ async def test_internal_error_message_is_generic_and_clean(swap_service, facade)
     sc, mirror = _both_mirrors(result)
 
     for env in (sc, mirror):
-        assert env["error_code"] == "internal_error"
+        assert env["error_code"] == "internal"
         assert env["message"] == "An internal error occurred. The request was not completed."
         assert "delete_everything" not in json.dumps(env)
         _no_codepoints(json.dumps(env))

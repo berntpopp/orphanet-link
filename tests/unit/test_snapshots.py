@@ -77,11 +77,9 @@ async def test_snapshot_get_server_capabilities_stable_subset(facade: FastMCP) -
             "invalid_input",
             "not_found",
             "ambiguous_query",
-            "data_unavailable",
-            "rate_limited",
             "upstream_unavailable",
-            "limit_exceeded",
-            "internal_error",
+            "rate_limited",
+            "internal",
         ],
     }
 

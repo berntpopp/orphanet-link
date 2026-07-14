@@ -49,20 +49,29 @@ forward-page step. Ordering is a stable, tested contract — see `AGENTS.md`.
 
 ## Error taxonomy
 
-Eight codes: `invalid_input`, `not_found`, `ambiguous_query`, `data_unavailable`,
-`rate_limited`, `upstream_unavailable`, `limit_exceeded`, `internal_error`.
+Six codes: `invalid_input`, `not_found`, `ambiguous_query`, `upstream_unavailable`,
+`rate_limited`, `internal`.
 
-Every error frame carries `retryable` and a `recovery_action` that tells a client
-which branch to take:
+This is the **closed enum** of the fleet's Response-Envelope Standard v1 — exactly
+these six, and nothing else. Every error frame also carries `retryable` and a
+`recovery_action` that tells a client which branch to take, and MCP's `isError: true`
+so a client that branches on the protocol flag sees the failure at all:
 
 | `recovery_action` | `retryable` | Codes |
 |---|---|---|
-| `retry_backoff` | `true` | `data_unavailable`, `rate_limited`, `upstream_unavailable` |
-| `reformulate_input` | `false` | `invalid_input`, `not_found`, `ambiguous_query`, `limit_exceeded` |
-| `switch_tool` | `false` | `internal_error` |
+| `retry_backoff` | `true` | `rate_limited`, `upstream_unavailable` |
+| `reformulate_input` | `false` | `invalid_input`, `not_found`, `ambiguous_query` |
+| `switch_tool` | `false` | `internal` |
 
-`limit_exceeded` is a *client-fixable* error, not a fault: narrow the request (a
-smaller `limit`, a shorter batch) and call again.
+This server used to ship three codes of its own invention, which a client written
+against the fleet contract had no branch for. They are folded onto the canon in
+`_classify` (`orphanet_link/mcp/envelope.py`), the single place the mapping happens:
+
+| Was | Is now | Why |
+|---|---|---|
+| `data_unavailable` | `upstream_unavailable` | The local index is a data dependency; "not there" is the case a caller already handles as an upstream being down. Stays retryable, still chains to `get_diagnostics`. |
+| `limit_exceeded` | `invalid_input` | Client-fixable, not a fault: narrow the request (a smaller `limit`, a shorter batch) and call again. The ceiling detail still rides the message. |
+| `internal_error` | `internal` | Same meaning; the enum spells it `internal`. |
 
 The list is `ERROR_CODES` in `orphanet_link/mcp/capabilities.py` — served to clients
 by `get_server_capabilities` and `orphanet://reference`. This section is tested

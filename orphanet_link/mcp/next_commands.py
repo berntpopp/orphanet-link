@@ -87,7 +87,9 @@ def default_error_next_commands(
         return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_phenotype":
         return [cmd("get_server_capabilities")]
-    if error_code == "data_unavailable":
+    if error_code == "upstream_unavailable":
+        # Covers the local-index-not-built case, which used to have its own
+        # (non-canonical) data_unavailable code: get_diagnostics is what reports it.
         return [cmd("get_diagnostics")]
     return [cmd("get_server_capabilities")]
 

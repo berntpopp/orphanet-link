@@ -31,15 +31,20 @@ if TYPE_CHECKING:
     from fastmcp import FastMCP
 
 #: Error taxonomy surfaced by every tool (see orphanet_link.mcp.envelope).
+#:
+#: The CLOSED enum of Response-Envelope Standard v1 — exactly these six, and nothing
+#: else. orphanet-link used to ship three codes of its own invention
+#: (``data_unavailable``, ``limit_exceeded``, ``internal_error``); a client written
+#: against the fleet contract had no branch for any of them. They are folded onto the
+#: canon in :func:`orphanet_link.mcp.envelope._classify`, which is the single place
+#: the mapping happens.
 ERROR_CODES: list[str] = [
     "invalid_input",
     "not_found",
     "ambiguous_query",
-    "data_unavailable",
-    "rate_limited",
     "upstream_unavailable",
-    "limit_exceeded",
-    "internal_error",
+    "rate_limited",
+    "internal",
 ]
 
 #: Frozen tool surface. capabilities.TOOLS must equal the registered tool set.

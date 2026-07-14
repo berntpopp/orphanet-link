@@ -55,7 +55,11 @@ _DATA_UNAVAILABLE_MESSAGE = (
 # success and error paths -- fleet disclaimer standardization) plus dynamic
 # fields: tool, request_id, [next_commands, capabilities_version, elapsed_ms] --
 # and those three are tiered by response_mode (see _shape_meta).
-_RETRYABLE = {"rate_limited", "upstream_unavailable", "data_unavailable"}
+#
+# Every code here is in the CLOSED enum of Response-Envelope Standard v1
+# (capabilities.ERROR_CODES). See _classify for the three legacy codes this backend
+# invented and where they now land.
+_RETRYABLE = {"rate_limited", "upstream_unavailable"}
 
 
 @dataclass
@@ -107,7 +111,28 @@ def _safe_message(exc: BaseException) -> str:
 
 
 def _classify(exc: BaseException) -> tuple[str, str]:
-    """Return ``(error_code, client_safe_message)`` for an exception."""
+    """Return ``(error_code, client_safe_message)`` for an exception.
+
+    Every code returned here is in the CLOSED enum of Response-Envelope Standard v1:
+    ``invalid_input · not_found · ambiguous_query · upstream_unavailable ·
+    rate_limited · internal``. This function is the ONE place the mapping happens, so
+    a code outside the enum cannot reach the wire.
+
+    Three codes this backend used to invent, and where they now land:
+
+    ``limit_exceeded`` -> ``invalid_input``
+        The caller fixes it by narrowing the request (a smaller ``limit``/batch), which
+        is what ``invalid_input`` means. ``recovery_action`` stays ``reformulate_input``
+        and the ceiling detail still rides the message, so nothing actionable is lost.
+
+    ``data_unavailable`` -> ``upstream_unavailable``
+        The local Orphanet index is a data dependency; "it is not there" is the same
+        situation the caller must handle as an upstream being down, and it stays
+        retryable. ``next_commands`` still chains to ``get_diagnostics``.
+
+    ``internal_error`` -> ``internal``
+        The same meaning; the enum simply spells it ``internal``.
+    """
     if isinstance(exc, McpToolError):
         return exc.error_code, exc.message
     if isinstance(exc, NotFoundError):  # WithdrawnEntryError subclasses this
@@ -117,14 +142,14 @@ def _classify(exc: BaseException) -> tuple[str, str]:
     if isinstance(exc, InvalidInputError):
         return "invalid_input", _safe_message(exc)
     if isinstance(exc, UntrustedTextLimitError):
-        # A fenced response exceeded a Response-Envelope v1.1 ceiling (object
-        # count / per-object bytes / total bytes). Surface an explicit typed
-        # limit error -- the standard forbids silent omission -- with the safe
-        # ceiling detail, never a generic internal_error.
-        return "limit_exceeded", _safe_message(exc)
+        # A fenced response exceeded a Response-Envelope v1.1 ceiling (object count /
+        # per-object bytes / total bytes). The standard forbids silent omission, so the
+        # ceiling detail is still surfaced -- as invalid_input, the closed-enum code for
+        # "the request as posed cannot be served; reformulate it".
+        return "invalid_input", _safe_message(exc)
     if isinstance(exc, DataUnavailableError):
         # SEVER: the message may embed a host path / sqlite str(exc); never surface it.
-        return "data_unavailable", _DATA_UNAVAILABLE_MESSAGE
+        return "upstream_unavailable", _DATA_UNAVAILABLE_MESSAGE
     if isinstance(exc, RateLimitError):
         return "rate_limited", "Upstream rate limit hit. Retry shortly."
     if isinstance(exc, ServiceUnavailableError | DownloadError):
@@ -136,7 +161,7 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         first = exc.errors(include_url=False)[0]
         loc = sanitize_message(".".join(str(p) for p in first["loc"]) or "input")
         return "invalid_input", f"Invalid value for argument `{loc}`."
-    return "internal_error", "An internal error occurred. The request was not completed."
+    return "internal", "An internal error occurred. The request was not completed."
 
 
 def classify_exception(exc: BaseException) -> tuple[str, str]:
@@ -152,9 +177,9 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
 def _recovery_action(error_code: str) -> str:
     if error_code in _RETRYABLE:
         return "retry_backoff"
-    # limit_exceeded is recoverable by narrowing the request (smaller limit / batch),
-    # so it routes to reformulate_input like the other client-fixable input errors.
-    if error_code in {"invalid_input", "not_found", "ambiguous_query", "limit_exceeded"}:
+    # The client-fixable input errors: the caller changes the call and retries. (An
+    # over-ceiling response is now invalid_input and routes here, as it always did.)
+    if error_code in {"invalid_input", "not_found", "ambiguous_query"}:
         return "reformulate_input"
     return "switch_tool"
 

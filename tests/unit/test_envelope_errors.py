@@ -110,7 +110,7 @@ async def test_explicit_fallback_is_used_as_next_command() -> None:
     fallback = {"tool": "get_server_capabilities", "arguments": {}}
 
     async def call() -> dict[str, Any]:
-        raise McpToolError(error_code="internal_error", message="kaboom")
+        raise McpToolError(error_code="internal", message="kaboom")
 
     result = envelope(
         await run_mcp_tool(
@@ -119,7 +119,7 @@ async def test_explicit_fallback_is_used_as_next_command() -> None:
             context=McpErrorContext("get_disease", fallback=fallback),
         )
     )
-    assert result["error_code"] == "internal_error"
+    assert result["error_code"] == "internal"
     assert result["_meta"]["next_commands"] == [fallback]
 
 

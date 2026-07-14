@@ -52,19 +52,21 @@ _CASES: list[tuple[BaseException, str, bool, str]] = [
         False,
         "reformulate_input",
     ),
-    (DataUnavailableError(), "data_unavailable", True, "retry_backoff"),
+    # The local index is a data dependency: "not built" is upstream_unavailable in
+    # the closed enum (Response-Envelope v1), and stays retryable.
+    (DataUnavailableError(), "upstream_unavailable", True, "retry_backoff"),
     (RateLimitError(), "rate_limited", True, "retry_backoff"),
     (ServiceUnavailableError(), "upstream_unavailable", True, "retry_backoff"),
     (DownloadError(), "upstream_unavailable", True, "retry_backoff"),
-    # A v1.1 fenced-response ceiling breach is an explicit typed limit error,
-    # recoverable by narrowing the request -- never a generic internal_error.
+    # A v1.1 fenced-response ceiling breach is client-fixable (narrow the request),
+    # which is invalid_input in the closed enum -- never a generic internal fault.
     (
         UntrustedTextLimitError("untrusted object count 300 exceeds ceiling 128"),
-        "limit_exceeded",
+        "invalid_input",
         False,
         "reformulate_input",
     ),
-    (ValueError("boom"), "internal_error", False, "switch_tool"),
+    (ValueError("boom"), "internal", False, "switch_tool"),
 ]
 
 
@@ -149,13 +151,13 @@ async def test_internal_error_does_not_leak_raw_message() -> None:
     result = envelope(
         await run_mcp_tool("t", _raiser(ValueError("boom")), context=McpErrorContext("t"))
     )
-    assert result["error_code"] == "internal_error"
+    assert result["error_code"] == "internal"
     assert result["message"] == "An internal error occurred. The request was not completed."
     assert "boom" not in result["message"]
 
 
 async def test_data_unavailable_surfaces_through_tool_body() -> None:
-    """``data_unavailable`` surfaces end-to-end through a real tool body when unbuilt.
+    """The unbuilt-index failure surfaces end-to-end as upstream_unavailable.
 
     A fresh ``OrphanetService`` with no repo and no db_path raises
     ``DataUnavailableError`` the moment ``.repo`` is touched. Crucially this does NOT
@@ -169,6 +171,6 @@ async def test_data_unavailable_surfaces_through_tool_body() -> None:
         await run_mcp_tool("get_disease", call, context=McpErrorContext("get_disease"))
     )
     assert result["success"] is False
-    assert result["error_code"] == "data_unavailable"
+    assert result["error_code"] == "upstream_unavailable"
     assert result["retryable"] is True
     assert result["recovery_action"] == "retry_backoff"
