@@ -13,6 +13,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from tests.unit._envelope import envelope
+
 _ORPHA_KIF7 = "ORPHA:166024"  # present in fixtures (has KIF7 gene)
 _ORPHA_58 = "ORPHA:58"  # "Alexander disease" present in fixtures
 
@@ -23,7 +25,7 @@ async def _tools(facade: FastMCP) -> dict[str, Any]:
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
     tools = await _tools(facade)
-    return await tools[name].fn(**kwargs)
+    return envelope(await tools[name].fn(**kwargs))
 
 
 # ---------------------------------------------------------------------------

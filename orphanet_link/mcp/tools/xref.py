@@ -9,9 +9,14 @@ from pydantic import Field
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_cross_ontology, after_resolve_xref
-from orphanet_link.mcp.schemas import CROSS_ONTOLOGY_SCHEMA, RESOLVE_XREF_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr, XrefIdStr
+from orphanet_link.mcp.tools._common import (
+    PrefixesArg,
+    ResponseMode,
+    TermStr,
+    ToolReturn,
+    XrefIdStr,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -24,7 +29,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
         name="resolve_xref",
         title="Resolve Cross-Reference",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=RESOLVE_XREF_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"xref", "resolve"},
         description=(
             "Resolve an external cross-reference CURIE (OMIM/MONDO/ICD-10/ICD-11/"
@@ -44,7 +49,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
             int, Field(ge=0, description="Rows to skip for forward paging (default 0).")
         ] = 0,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().resolve_xref(
                 xref_id, limit=limit, offset=offset, response_mode=response_mode
@@ -64,28 +69,23 @@ def register_xref_tools(mcp: FastMCP) -> None:
         name="map_cross_ontology",
         title="Map Cross-Ontology",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=CROSS_ONTOLOGY_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"xref"},
         description=(
             "List an Orphanet disorder's cross-references to other ontologies, grouped "
             "by source (OMIM/MONDO/ICD-10/ICD-11/UMLS/GARD/MeSH/MedDRA), each with "
-            "its mapping relation. Optionally restrict to a subset of sources, or pass "
-            "fields=['xrefs.OMIM'] for a sparse projection. count is the number of leaf "
-            "mapping rows (individual targets), not the number of source groups. "
+            "its mapping relation. Returns them under `mappings` (get_disease returns "
+            "the same data under `xrefs`). Use prefixes=['OMIM'] to restrict to a "
+            "subset of sources. count is the number of leaf mapping rows (individual "
+            "targets), not the number of source groups. "
             "Signature: map_cross_ontology(term, prefixes=, response_mode=)."
         ),
     )
     async def map_cross_ontology(
         term: TermStr,
-        prefixes: Annotated[
-            list[str] | None,
-            Field(
-                description="Restrict to these source prefixes, e.g. ['OMIM', 'MONDO'].",
-                examples=[["OMIM", "MONDO"]],
-            ),
-        ] = None,
+        prefixes: PrefixesArg = None,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().map_cross_ontology(
                 term, prefixes=prefixes, response_mode=response_mode

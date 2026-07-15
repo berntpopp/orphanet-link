@@ -16,13 +16,14 @@ from __future__ import annotations
 
 from orphanet_link.exceptions import NotFoundError
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
+from tests.unit._envelope import envelope
 
 
 async def test_success_envelope_matches_response_envelope_standard_v1() -> None:
     async def call() -> dict[str, object]:
         return {"results": [{"id": "x"}]}
 
-    result = await run_mcp_tool("get_disease", call)
+    result = envelope(await run_mcp_tool("get_disease", call))
     assert result["success"] is True
     assert result["results"] == [{"id": "x"}]
     assert result["_meta"]["tool"] == "get_disease"
@@ -33,7 +34,7 @@ async def test_single_item_result_key_is_preserved() -> None:
     async def call() -> dict[str, object]:
         return {"result": {"id": "x"}}
 
-    result = await run_mcp_tool("get_disease", call)
+    result = envelope(await run_mcp_tool("get_disease", call))
     assert result["success"] is True
     assert result["result"] == {"id": "x"}
 
@@ -42,8 +43,8 @@ async def test_error_envelope_is_flat_not_a_bare_exception() -> None:
     async def call() -> dict[str, object]:
         raise NotFoundError("not found")
 
-    result = await run_mcp_tool(
-        "get_disease", call, context=McpErrorContext(tool_name="get_disease")
+    result = envelope(
+        await run_mcp_tool("get_disease", call, context=McpErrorContext(tool_name="get_disease"))
     )
     assert result["success"] is False
     assert isinstance(result["error_code"], str) and result["error_code"]

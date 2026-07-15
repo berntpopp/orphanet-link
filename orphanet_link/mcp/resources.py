@@ -56,8 +56,8 @@ ORPHANET_USAGE_NOTES = (
 )
 
 ORPHANET_REFERENCE_NOTES = (
-    "Error codes (8): invalid_input, not_found, ambiguous_query, data_unavailable, "
-    "rate_limited, upstream_unavailable, limit_exceeded, internal_error. match_type on "
+    "Error codes (6): invalid_input, not_found, ambiguous_query, upstream_unavailable, "
+    "rate_limited, internal. match_type on "
     f"resolve_disease is one of {render_match_types()} (strongest first). "
     "Cross-references are ranked by mapping relation: "
     f"{render_predicate_ranking()} (E = exact). Supported xref sources: OMIM, MONDO, "

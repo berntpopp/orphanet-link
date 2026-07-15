@@ -11,14 +11,13 @@ dispatch and discloses any rewrite under ``_meta.argument_aliases_applied``.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
 from fastmcp.exceptions import ValidationError as FastMCPValidationError
 from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools.tool import ToolResult
-from mcp.types import CallToolRequestParams, TextContent
+from mcp.types import CallToolRequestParams
 from pydantic import ValidationError as PydanticValidationError
 
 from orphanet_link.mcp.arg_help import (
@@ -28,7 +27,7 @@ from orphanet_link.mcp.arg_help import (
     normalize_alias_args,
     tool_signature,
 )
-from orphanet_link.mcp.envelope import build_arg_error_envelope
+from orphanet_link.mcp.envelope import build_arg_error_envelope, error_result
 from orphanet_link.mcp.untrusted_content import sanitize_tree
 
 logger = logging.getLogger(__name__)
@@ -95,16 +94,24 @@ class ArgValidationMiddleware(Middleware):
         first = exc.errors(include_url=False)[0]
         loc = ".".join(str(p) for p in first.get("loc", ())) or "input"
         error_type = str(first.get("type", "value_error"))
+        # The failing param may be a top-level name (``prefixes``) OR an item of an
+        # array param (``prefixes.0`` for a bad element of a list[Literal] vocabulary).
+        # Resolve to the base parameter so a bad ARRAY ITEM surfaces its item enum,
+        # instead of being misread as an unknown argument named "prefixes.0".
+        base = loc.split(".", 1)[0]
         # A real param with a bad *value* -> surface the constraint (enum/range)
         # or, failing that, the expected type + an example -- never the list of
         # argument names (which is reserved for genuinely unknown arguments).
         constraints = None
-        if loc in valid and error_type not in ("missing", "missing_argument"):
-            field_schema = schema.get("properties", {}).get(loc, {})
+        target = loc if loc in valid else (base if base in valid else None)
+        if target is not None and error_type not in ("missing", "missing_argument"):
+            field_schema = schema.get("properties", {}).get(target, {})
             constraints = describe_constraints(field_schema) or describe_type_expectation(
                 field_schema
             )
-        suggestion = did_you_mean(loc, valid) if loc not in valid else None
+        # Only offer a name suggestion when the argument itself is unknown -- not when a
+        # valid array param merely got a bad item (base in valid).
+        suggestion = did_you_mean(loc, valid) if loc not in valid and base not in valid else None
         envelope = build_arg_error_envelope(
             tool_name=name,
             loc=loc,
@@ -120,7 +127,9 @@ class ArgValidationMiddleware(Middleware):
         # type). The offending argument NAME is caller-controlled, so it is never
         # written to the log sink -- the sanitized value still rides the envelope.field.
         logger.warning("mcp_arg_error tool=%s type=%s", name, error_type)
-        return ToolResult(
-            structured_content=envelope,
-            content=[TextContent(type="text", text=json.dumps(envelope))],
-        )
+        # is_error=True: an argument-binding failure IS an error, and a client that
+        # branches on MCP's isError must see one. FastMCP's own default for a failed
+        # pydantic validation is already isError=true -- this middleware was CATCHING
+        # that and handing back a plain (isError-false) result, so reshaping the
+        # failure into a useful envelope was silently downgrading it to a success.
+        return error_result(envelope)

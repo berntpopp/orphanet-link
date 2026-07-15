@@ -11,7 +11,7 @@ concurrency:
 jobs:
   conformance:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       CONFORMANCE_NAME: orphanet-link   # serverInfo.name
       CONFORMANCE_TIER: stateless
@@ -22,21 +22,62 @@ jobs:
       - run: uv sync --group dev
       - name: Build & start server
         run: make docker-build && make docker-up
-      - name: Wait for health
+      - name: Wait for health + MCP readiness
         run: |
+          # On FIRST BOOT this container builds the Orphanet index from the Orphadata XML
+          # (the prebuilt GitHub Release asset is not always present), which is why compose
+          # sets `start_period: 120s`. The wait budget here must comfortably exceed that: a
+          # short wait does not make the boot faster, it just turns a slow-but-healthy start
+          # into a confusing probe failure further down the job.
+          ready=""
+          for _ in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:${MCP_PORT}/health" >/dev/null 2>&1; then ready=1; break; fi
+            sleep 5
+          done
+          if [ -z "$ready" ]; then
+            echo "::error::/health never came up (waited 10 min)"
+            docker compose -f docker/docker-compose.yml logs --no-color --tail=200 || true
+            exit 1
+          fi
+          # /health (the REST app) answers before the MCP sub-app finishes binding, so wait
+          # for /mcp too: the probe's first POST must not race a not-yet-bound endpoint.
+          #
+          # NB `code=$(curl ...)` takes CURL's exit status, so `|| true` is REQUIRED under
+          # `bash -e` (the Actions default): without it the very first failed poll kills the
+          # step outright — which is a poll loop that cannot poll.
+          ready=""
           for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:${MCP_PORT}/health"; then
-              break
-            fi
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${MCP_PORT}/mcp" \
+              -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"wait","version":"0"}}}' || true)
+            if [ "$code" = "200" ]; then ready=1; break; fi
             sleep 2
           done
+          if [ -z "$ready" ]; then
+            echo "::error::/mcp never became ready (last status: ${code:-none})"
+            docker compose -f docker/docker-compose.yml logs --no-color --tail=200 || true
+            exit 1
+          fi
       - name: Run conformance probe
         env:
           CONFORMANCE_MCP_URL: http://127.0.0.1:${{ env.MCP_PORT }}
         run: uv run pytest tests/conformance/test_transport_v1.py -v
+
+      - name: Run behaviour probe
+        # Behaviour Conformance v1 — the recurring contract bugs a unit test cannot see
+        # (silent-empty filter, lying total/truncated, response_mode that destroys the
+        # payload, an error an LLM cannot act on, a missing isError). Every probe is
+        # derived from THIS server's own advertised schema; there is no per-repo probe
+        # list to maintain, and a tool that cannot be probed is reported UNGATED, never
+        # as passing.
+        env:
+          CONFORMANCE_MCP_URL: http://127.0.0.1:${{ env.MCP_PORT }}
+        run: uv run pytest tests/conformance/test_behaviour_v1.py -v
       - name: Logs on failure
+        # NB: NON-following logs. `make docker-logs` follows (docker compose logs -f) and
+        # would hang this step until the job timeout on a real failure.
         if: failure()
-        run: make docker-logs || docker compose -f docker/docker-compose.yml logs
+        run: docker compose -f docker/docker-compose.yml logs --no-color --tail=200 || true
       - name: Teardown
         if: always()
         run: make docker-down || true

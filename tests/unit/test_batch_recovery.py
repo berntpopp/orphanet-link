@@ -14,6 +14,8 @@ from typing import Any
 import pytest
 from fastmcp import FastMCP
 
+from tests.unit._envelope import envelope
+
 _ORPHA_58 = "ORPHA:58"
 _AMBIGUOUS = "a"  # FTS-matches both fixture disorders -> ambiguous_query
 
@@ -23,7 +25,7 @@ async def _tools(facade: FastMCP) -> dict[str, Any]:
 
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
-    return await (await _tools(facade))[name].fn(**kwargs)
+    return envelope(await (await _tools(facade))[name].fn(**kwargs))
 
 
 # --- P2.1: ambiguous batch items carry candidates -----------------------------

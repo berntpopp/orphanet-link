@@ -7,17 +7,27 @@ fan-out. Kept out of ``orphanet_service`` to split by responsibility (and budget
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, Literal, get_args
 
 from orphanet_link.exceptions import InvalidInputError
 
 #: Sections get_disease can compose via ``include=``. Each is otherwise its own
 #: single-item tool; natural_history/classification are already inline in the base
 #: record so they are not listed here.
-INCLUDABLE: tuple[str, ...] = ("genes", "phenotypes", "prevalence", "disability")
+#:
+#: A CLOSED vocabulary, and the type is its single source of truth so the advertised
+#: schema and the runtime cannot disagree. ``get_disease.include`` used to advertise a
+#: bare ``list[str]`` while accepting only these four, so ``include=["natural_history"]``
+#: was schema-valid and failed at runtime -- the harmful direction (the model obeys the
+#: schema and the call fails). Declaring it as a ``Literal`` puts the enum in the schema.
+IncludableSection = Literal["genes", "phenotypes", "prevalence", "disability"]
+
+#: DERIVED from the type above -- never a second hand-maintained copy of the list.
+INCLUDABLE: tuple[str, ...] = get_args(IncludableSection)
 
 
-def compose_sections(repo: Any, code: str, include: list[str]) -> dict[str, Any]:
+def compose_sections(repo: Any, code: str, include: Sequence[str]) -> dict[str, Any]:
     """Return the requested ``include`` association sections, fetched from ``repo``.
 
     Unknown section names raise ``invalid_input`` (``field="include"``, carrying

@@ -10,7 +10,6 @@ from orphanet_link.constants import SEARCH_LIMIT_MAX
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_get_disease, after_resolve_disease, after_search
-from orphanet_link.mcp.schemas import DISEASE_SCHEMA, RESOLVE_DISEASE_SCHEMA, SEARCH_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
 from orphanet_link.mcp.tools._common import (
     FieldsArg,
@@ -18,6 +17,7 @@ from orphanet_link.mcp.tools._common import (
     QueryStr,
     ResponseMode,
     TermStr,
+    ToolReturn,
 )
 from orphanet_link.mcp.untrusted_fencing import (
     UntrustedText,
@@ -37,7 +37,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
         name="resolve_disease",
         title="Resolve Disease",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=RESOLVE_DISEASE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "resolve"},
         description=(
             "Resolve a disease label, synonym, or ORPHAcode (ORPHA:166024 or 166024) "
@@ -48,7 +48,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
     )
     async def resolve_disease(
         query: QueryStr, response_mode: ResponseMode = "compact"
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().resolve_disease(query, response_mode=response_mode)
             payload.setdefault("_meta", {})["next_commands"] = after_resolve_disease(payload)
@@ -66,7 +66,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
         name="search_diseases",
         title="Search Diseases",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=SEARCH_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "search"},
         description=(
             "Full-text search over Orphanet disease names, synonyms, and definitions "
@@ -87,7 +87,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
             bool, Field(description="Include obsolete terms (default false).")
         ] = False,
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().search_diseases(
                 query,
@@ -117,7 +117,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
         name="get_disease",
         title="Get Disease",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=DISEASE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease"},
         description=(
             "Return an Orphanet disease record: definition, synonyms, grouped "
@@ -136,7 +136,7 @@ def register_disease_tools(mcp: FastMCP) -> None:
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
         include: IncludeArg = None,
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             payload = get_orphanet_service().get_disease(
                 term, response_mode=response_mode, fields=fields, include=include

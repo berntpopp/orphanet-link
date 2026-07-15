@@ -76,6 +76,14 @@ def describe_constraints(field_schema: Mapping[str, Any]) -> tuple[list[str], st
         if isinstance(node, Mapping) and node.get("enum"):
             vals = [str(v) for v in node["enum"]]
             return vals, "must be one of: " + ", ".join(vals)
+    # A closed ARRAY vocabulary (``list[Literal[...]]``) carries its enum under
+    # ``items.enum``, one level down -- surface it so a bad ITEM (``prefixes.0``) is
+    # answered with the allowed values, not a misleading "unknown argument" name error.
+    for node in nodes:
+        items = node.get("items") if isinstance(node, Mapping) else None
+        if isinstance(items, Mapping) and items.get("enum"):
+            vals = [str(v) for v in items["enum"]]
+            return vals, "each item must be one of: " + ", ".join(vals)
     lo: Any = None
     hi: Any = None
     for node in nodes:

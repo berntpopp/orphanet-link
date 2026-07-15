@@ -18,9 +18,8 @@ from orphanet_link.exceptions import InvalidInputError
 from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, classify_exception, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_get_disease_batch, after_resolve_batch
-from orphanet_link.mcp.schemas import BATCH_DISEASE_SCHEMA, BATCH_RESOLVE_SCHEMA
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode
+from orphanet_link.mcp.tools._common import FieldsArg, ResponseMode, ToolReturn
 from orphanet_link.mcp.untrusted_content import sanitize_tree
 from orphanet_link.mcp.untrusted_fencing import (
     UntrustedText,
@@ -89,7 +88,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
         name="resolve_disease_batch",
         title="Resolve Diseases (batch)",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=BATCH_RESOLVE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "resolve", "batch"},
         description=(
             "Resolve many labels/ORPHAcodes/xrefs in one call (partial success: each "
@@ -100,9 +99,16 @@ def register_batch_tools(mcp: FastMCP) -> None:
         ),
     )
     async def resolve_disease_batch(
-        queries: Annotated[list[str], Field(description=f"1..{MAX_BATCH} labels/ids/xrefs.")],
+        queries: Annotated[
+            list[str],
+            Field(
+                description=f"A LIST of 1..{MAX_BATCH} disease labels, ORPHAcodes or xref "
+                "CURIEs to resolve — one entry per item, not a comma-joined string.",
+                examples=[["ORPHA:58", "Alexander disease", "OMIM:607131"]],
+            ),
+        ],
         response_mode: ResponseMode = "compact",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             _require_batch(queries, "queries")
             svc = get_orphanet_service()
@@ -131,7 +137,7 @@ def register_batch_tools(mcp: FastMCP) -> None:
         name="get_disease_batch",
         title="Get Diseases (batch)",
         annotations=READ_ONLY_OPEN_WORLD,
-        output_schema=BATCH_DISEASE_SCHEMA,
+        output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "batch"},
         description=(
             "Fetch many disease records in one call (partial success per item: each "
@@ -142,10 +148,17 @@ def register_batch_tools(mcp: FastMCP) -> None:
         ),
     )
     async def get_disease_batch(
-        terms: Annotated[list[str], Field(description=f"1..{MAX_BATCH} ids/labels/xrefs.")],
+        terms: Annotated[
+            list[str],
+            Field(
+                description=f"A LIST of 1..{MAX_BATCH} ORPHAcodes, disease labels or xref "
+                "CURIEs to fetch — one entry per item, not a comma-joined string.",
+                examples=[["ORPHA:58", "ORPHA:166024", "OMIM:607131"]],
+            ),
+        ],
         response_mode: ResponseMode = "compact",
         fields: FieldsArg = None,
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         async def call() -> dict[str, Any]:
             _require_batch(terms, "terms")
             svc = get_orphanet_service()

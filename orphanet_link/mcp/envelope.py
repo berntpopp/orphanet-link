@@ -8,6 +8,7 @@ message.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -15,8 +16,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 from pydantic import ValidationError as PydanticValidationError
 
+from orphanet_link.constants import ERROR_CODES, ErrorCode
 from orphanet_link.exceptions import (
     AmbiguousQueryError,
     DataUnavailableError,
@@ -52,7 +56,15 @@ _DATA_UNAVAILABLE_MESSAGE = (
 # success and error paths -- fleet disclaimer standardization) plus dynamic
 # fields: tool, request_id, [next_commands, capabilities_version, elapsed_ms] --
 # and those three are tiered by response_mode (see _shape_meta).
-_RETRYABLE = {"rate_limited", "upstream_unavailable", "data_unavailable"}
+#
+# Every code here is in the CLOSED enum of Response-Envelope Standard v1
+# (constants.ERROR_CODES). See _classify for the three legacy codes this backend
+# invented and where they now land.
+_RETRYABLE = {"rate_limited", "upstream_unavailable"}
+
+#: The closed enum as a set, for the runtime backstop in _classify (the ONE branch that
+#: does not hardcode its code is McpToolError, which returns error_code verbatim).
+_CLOSED_ERROR_CODES: frozenset[str] = frozenset(ERROR_CODES)
 
 
 @dataclass
@@ -72,12 +84,19 @@ class McpErrorContext:
 
 
 class McpToolError(Exception):
-    """Raised inside a tool body to emit a specific error code/message."""
+    """Raised inside a tool body to emit a specific error code/message.
 
-    def __init__(self, *, error_code: str, message: str) -> None:
+    ``error_code`` is typed ``ErrorCode`` (the closed Response-Envelope v1 enum), so a
+    caller cannot pass a code of their own invention -- mypy rejects it at the call site.
+    ``_classify`` additionally re-checks it against the enum at runtime and severs anything
+    outside to ``internal``, because a type annotation is not enforced by the interpreter
+    and this value is echoed verbatim onto an ``isError: true`` envelope's ``error_code``.
+    """
+
+    def __init__(self, *, error_code: ErrorCode, message: str) -> None:
         """Store an error code and client-safe message."""
         super().__init__(message)
-        self.error_code = error_code
+        self.error_code: ErrorCode = error_code
         self.message = message
 
 
@@ -104,9 +123,37 @@ def _safe_message(exc: BaseException) -> str:
 
 
 def _classify(exc: BaseException) -> tuple[str, str]:
-    """Return ``(error_code, client_safe_message)`` for an exception."""
+    """Return ``(error_code, client_safe_message)`` for an exception.
+
+    Every code returned here is in the CLOSED enum of Response-Envelope Standard v1:
+    ``invalid_input · not_found · ambiguous_query · upstream_unavailable ·
+    rate_limited · internal``. This function is the ONE place the mapping happens, so
+    a code outside the enum cannot reach the wire.
+
+    Three codes this backend used to invent, and where they now land:
+
+    ``limit_exceeded`` -> ``invalid_input``
+        The caller fixes it by narrowing the request (a smaller ``limit``/batch), which
+        is what ``invalid_input`` means. ``recovery_action`` stays ``reformulate_input``
+        and the ceiling detail still rides the message, so nothing actionable is lost.
+
+    ``data_unavailable`` -> ``upstream_unavailable``
+        The local Orphanet index is a data dependency; "it is not there" is the same
+        situation the caller must handle as an upstream being down, and it stays
+        retryable. ``next_commands`` still chains to ``get_diagnostics``.
+
+    ``internal_error`` -> ``internal``
+        The same meaning; the enum simply spells it ``internal``.
+    """
     if isinstance(exc, McpToolError):
-        return exc.error_code, exc.message
+        # error_code is typed ErrorCode, but a type annotation is not enforced by the
+        # interpreter, and this value is echoed VERBATIM onto the wire (it is the only
+        # branch that does not hardcode its code). Re-check against the closed enum and
+        # sever anything outside to `internal` so an off-contract code -- e.g. from a
+        # miswritten raise, or a runtime that ignored the type -- can never be advertised.
+        if exc.error_code in _CLOSED_ERROR_CODES:
+            return exc.error_code, exc.message
+        return "internal", exc.message
     if isinstance(exc, NotFoundError):  # WithdrawnEntryError subclasses this
         return "not_found", _safe_message(exc)
     if isinstance(exc, AmbiguousQueryError):
@@ -114,14 +161,14 @@ def _classify(exc: BaseException) -> tuple[str, str]:
     if isinstance(exc, InvalidInputError):
         return "invalid_input", _safe_message(exc)
     if isinstance(exc, UntrustedTextLimitError):
-        # A fenced response exceeded a Response-Envelope v1.1 ceiling (object
-        # count / per-object bytes / total bytes). Surface an explicit typed
-        # limit error -- the standard forbids silent omission -- with the safe
-        # ceiling detail, never a generic internal_error.
-        return "limit_exceeded", _safe_message(exc)
+        # A fenced response exceeded a Response-Envelope v1.1 ceiling (object count /
+        # per-object bytes / total bytes). The standard forbids silent omission, so the
+        # ceiling detail is still surfaced -- as invalid_input, the closed-enum code for
+        # "the request as posed cannot be served; reformulate it".
+        return "invalid_input", _safe_message(exc)
     if isinstance(exc, DataUnavailableError):
         # SEVER: the message may embed a host path / sqlite str(exc); never surface it.
-        return "data_unavailable", _DATA_UNAVAILABLE_MESSAGE
+        return "upstream_unavailable", _DATA_UNAVAILABLE_MESSAGE
     if isinstance(exc, RateLimitError):
         return "rate_limited", "Upstream rate limit hit. Retry shortly."
     if isinstance(exc, ServiceUnavailableError | DownloadError):
@@ -133,7 +180,7 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         first = exc.errors(include_url=False)[0]
         loc = sanitize_message(".".join(str(p) for p in first["loc"]) or "input")
         return "invalid_input", f"Invalid value for argument `{loc}`."
-    return "internal_error", "An internal error occurred. The request was not completed."
+    return "internal", "An internal error occurred. The request was not completed."
 
 
 def classify_exception(exc: BaseException) -> tuple[str, str]:
@@ -149,9 +196,9 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
 def _recovery_action(error_code: str) -> str:
     if error_code in _RETRYABLE:
         return "retry_backoff"
-    # limit_exceeded is recoverable by narrowing the request (smaller limit / batch),
-    # so it routes to reformulate_input like the other client-fixable input errors.
-    if error_code in {"invalid_input", "not_found", "ambiguous_query", "limit_exceeded"}:
+    # The client-fixable input errors: the caller changes the call and retries. (An
+    # over-ceiling response is now invalid_input and routes here, as it always did.)
+    if error_code in {"invalid_input", "not_found", "ambiguous_query"}:
         return "reformulate_input"
     return "switch_tool"
 
@@ -353,13 +400,43 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     return {k: v for k, v in meta.items() if k != "elapsed_ms"}
 
 
+def error_result(envelope: dict[str, Any]) -> ToolResult:
+    """Wrap an error envelope so it carries BOTH the structure and MCP's ``isError``.
+
+    Response-Envelope Standard v1: *"isError: true is REQUIRED so clients surface the
+    error to the model for self-correction."* A tool that RETURNS a dict can never set
+    it (fastmcp/tools/base.py builds the ToolResult with ``is_error`` defaulted false),
+    so every error envelope this server returned was delivered to the client as a
+    SUCCESSFUL call carrying ``success: false`` -- a client branching on ``isError``,
+    as the protocol tells it to, saw nothing wrong.
+
+    Raising instead is NOT the fix: FastMCP's raise path sets ``isError`` but discards
+    ``structuredContent`` entirely, which would throw away the machine-readable
+    envelope (error_code, field, allowed_values, next_commands) the model needs to
+    self-correct. Returning a ``ToolResult`` is the only shape that gives us both.
+
+    The TextContent mirror is kept in step with ``structured_content`` so neither
+    caller-visible surface disagrees with the other.
+    """
+    return ToolResult(
+        structured_content=envelope,
+        content=[TextContent(type="text", text=json.dumps(envelope))],
+        is_error=True,
+    )
+
+
 async def run_mcp_tool(
     tool_name: str,
     call: Callable[[], Awaitable[dict[str, Any]]],
     *,
     context: McpErrorContext | None = None,
-) -> dict[str, Any]:
-    """Execute a tool body, returning the result dict or a structured error dict."""
+) -> dict[str, Any] | ToolResult:
+    """Execute a tool body.
+
+    Returns the result dict on success, or -- on failure -- a ``ToolResult`` carrying
+    the structured error envelope AND ``isError: true`` (never a bare dict, which
+    cannot set the protocol flag; never a raise, which would discard the envelope).
+    """
     ctx = context or McpErrorContext(tool_name=tool_name)
     start = time.perf_counter()
     try:
@@ -401,4 +478,4 @@ async def run_mcp_tool(
         # Whole-envelope code-point backstop over EVERY string leaf (message, field,
         # allowed_values, hint, candidates, replaced_by, next_commands arguments, _meta)
         # so no forbidden code point survives on any error surface, whatever built it.
-        return cast("dict[str, Any]", sanitize_tree(envelope))
+        return error_result(cast("dict[str, Any]", sanitize_tree(envelope)))
