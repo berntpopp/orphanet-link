@@ -45,6 +45,9 @@ classes, and one the audit had missed.
 
 ### Changed
 
+- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
+  (`docs/conformance/behaviour.py` blob `c69801687`) and live-validated this
+  backend against the current behaviour gate.
 - `XREF_SOURCES`, `ERROR_CODES`, the HPO-frequency and include vocabularies are now each
   declared **once** as a `Literal` and derived into their list forms — a bare
   hand-maintained `XREF_PREFIXES` duplicate (a third copy of the same eight strings) is
