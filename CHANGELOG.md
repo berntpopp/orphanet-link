@@ -51,6 +51,14 @@ classes, and one the audit had missed.
   aliased away. `test_pagination_invariants` derives the set of paginated tools from the
   registry instead of hardcoding six, so a new list tool cannot ship untested.
 
+## [Unreleased]
+
+### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `ba09fdc`
+  (`docs/conformance/behaviour.py` blob `30d639242b`) and live-validated this
+  backend against the current behaviour gate.
+
 ## [0.4.0] - 2026-07-14
 
 MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2
