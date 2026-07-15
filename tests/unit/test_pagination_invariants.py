@@ -23,7 +23,12 @@ from fastmcp import FastMCP
 _ORPHA_KIF7 = "ORPHA:166024"  # ancestors closure = {156, 93419} (total 2)
 _ORPHA_156 = "ORPHA:156"  # descendants closure = {93419, 166024} (total 2)
 
-#: (tool_name, base_kwargs, rows_key) for every list-returning tool.
+#: (tool_name, base_kwargs, rows_key) for every list-returning tool. The base_kwargs are
+#: genuinely per-tool (each needs a fixture id/label that returns rows), so they cannot be
+#: derived -- but the COMPLETENESS of this list is not left to memory:
+#: ``test_every_paginated_tool_is_covered`` derives the set of paginated tools from the
+#: registry and fails if any is missing here. A hardcoded list nobody guards is the bug one
+#: level up; a hardcoded list a derived guard pins is just a fixture table.
 _LIST_TOOLS: list[tuple[str, dict[str, Any], str]] = [
     ("search_diseases", {"query": "a"}, "results"),
     ("get_disease_ancestors", {"term": _ORPHA_KIF7}, "ancestors"),
@@ -32,6 +37,9 @@ _LIST_TOOLS: list[tuple[str, dict[str, Any], str]] = [
     ("find_diseases_by_gene", {"gene_symbol": "KIF7"}, "results"),
     ("find_diseases_by_phenotype", {"hpo_id": "HP:0000256"}, "results"),
 ]
+
+#: The signature of a paginated tool: it offers BOTH a forward-page offset and a page cap.
+_PAGINATION_PARAMS = frozenset({"limit", "offset"})
 
 #: Page windows exercised per tool: small page, next page, oversized page (no
 #: truncation), and an offset past the end (empty page, no next_offset).
@@ -45,6 +53,28 @@ _WINDOWS: list[tuple[int, int]] = [
 
 async def _tools(facade: FastMCP) -> dict[str, Any]:
     return {t.name: t for t in await facade.list_tools()}
+
+
+async def test_every_paginated_tool_is_covered(facade: FastMCP) -> None:
+    """Derive the paginated tools from the registry; none may be missing from _LIST_TOOLS.
+
+    So a newly-added list tool cannot ship with its pagination invariants ungated: it
+    breaks the build until it is given a fixture row here.
+    """
+    covered = {name for name, _, _ in _LIST_TOOLS}
+    paginated = {
+        tool.name
+        for tool in await facade.list_tools()
+        if set((getattr(tool, "parameters", None) or {}).get("properties", {}))
+        >= _PAGINATION_PARAMS
+    }
+    missing = paginated - covered
+    assert not missing, (
+        f"these tools accept limit+offset but are not in _LIST_TOOLS, so their pagination "
+        f"invariants are untested: {sorted(missing)}"
+    )
+    stale = covered - paginated
+    assert not stale, f"_LIST_TOOLS names tools that are not paginated: {sorted(stale)}"
 
 
 async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:

@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+Follow-up to the [#28] review — a hardened behaviour gate (which now sees array-item enums
+and grouped payloads) plus adversarial review found four more instances of the same
+classes, and one the audit had missed.
+
+- **HIGH — `map_cross_ontology.prefixes` was a silently-empty filter.** It shipped as a
+  bare `list[str]`, so `prefixes=["__bogus__"]` returned `count: 0, success: true` —
+  indistinguishable from a disorder with no such cross-references. The earlier gate could
+  not see it: it probed only *scalar* filters, and its row-finder ignored the grouped
+  `mappings` object. It now declares an item `enum` **and** rejects an unrecognised source
+  at runtime (`invalid_input`). Applied as a rule to every optional array filter, which
+  also caught **`get_disease.fields`** silently zeroing the payload on an unknown field —
+  a fourth instance the audit never reported.
+- **MEDIUM — `get_disease.include` advertised any string but accepted only
+  genes/phenotypes/prevalence/disability**, so `include=["natural_history"]` was
+  schema-valid and failed at runtime (the harmful direction). It is now a closed item
+  `enum`, matching the runtime.
+- **MEDIUM — `error_code` was not actually constrained.** `McpToolError` passed its code
+  through verbatim, so a miswritten raise could put e.g. `outside_contract` on an
+  `isError: true` envelope. The code is now typed `ErrorCode` (mypy-checked at the call
+  site) **and** re-checked at runtime in `_classify`, which severs anything outside the
+  closed enum to `internal`.
+- **The false `fields=` parameter was still advertised through discovery.**
+  `get_server_capabilities` / `orphanet://capabilities` still told a model
+  `map_cross_ontology` accepts `fields=[...]` (it rejects it), and still described
+  `minimal` as "keeps only orpha_code + name" — contradicting 0.4.0's central fix. Both
+  prose surfaces are corrected, and a test now checks the whole serialised discovery
+  payload, not just the decorator description.
+- **A rejected array-item value now names the allowed vocabulary.** A closed
+  `list[Literal[...]]` puts its enum under `items.enum`, so a bad element
+  (`prefixes.0`) was misclassified as an *unknown argument* — "Did you mean `prefixes`?"
+  — telling the model to fix the argument that was already right. The arg-validation
+  middleware now resolves an indexed `loc` to its base parameter and surfaces the item
+  enum: `invalid_input`, *"each item must be one of: OMIM, MONDO, ICD-10, …"*, with the
+  values in `allowed_values` — an error a model can self-correct from in one step.
+
+### Changed
+
+- `XREF_SOURCES`, `ERROR_CODES`, the HPO-frequency and include vocabularies are now each
+  declared **once** as a `Literal` and derived into their list forms — a bare
+  hand-maintained `XREF_PREFIXES` duplicate (a third copy of the same eight strings) is
+  aliased away. `test_pagination_invariants` derives the set of paginated tools from the
+  registry instead of hardcoding six, so a new list tool cannot ship untested.
+
 ## [0.4.0] - 2026-07-14
 
 MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2

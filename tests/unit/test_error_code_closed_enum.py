@@ -26,7 +26,7 @@ import pytest
 
 from orphanet_link import exceptions as exc_module
 from orphanet_link.mcp.capabilities import ERROR_CODES
-from orphanet_link.mcp.envelope import _classify, _recovery_action
+from orphanet_link.mcp.envelope import McpToolError, _classify, _recovery_action
 
 #: Response-Envelope Standard v1, verbatim. Exactly these six, and nothing else.
 RATIFIED = frozenset(
@@ -108,3 +108,32 @@ def test_not_found_is_not_used_for_a_bad_argument() -> None:
     """
     code, _ = _classify(exc_module.InvalidInputError("bad", field="term"))
     assert code == "invalid_input"
+
+
+def test_mctoolerror_passes_a_valid_code_through() -> None:
+    """An in-enum code raised via McpToolError reaches the envelope unchanged."""
+    code, message = _classify(McpToolError(error_code="not_found", message="gone"))
+    assert code == "not_found"
+    assert message == "gone"
+
+
+def test_mctoolerror_with_an_off_contract_code_is_severed_to_internal() -> None:
+    """The ONE branch that echoes its code verbatim must still not escape the enum.
+
+    ``McpToolError.error_code`` is typed ``ErrorCode``, but a type annotation is not
+    enforced by the interpreter -- and this is the only ``_classify`` branch that does not
+    hardcode its code. Codex reproduced an ``isError: true`` envelope carrying
+    ``error_code: "outside_contract"`` through exactly this path. ``_classify`` now
+    re-checks it at runtime and severs anything outside the enum to ``internal``. The
+    reflection sweep above never sees this path (it only discovers ``OrphanetError``
+    subclasses), so it is pinned explicitly here.
+    """
+    # Bypass the typed constructor the way an untyped runtime / a mis-cast would.
+    rogue = McpToolError(error_code="not_found", message="hostile")
+    rogue.error_code = "outside_contract"  # type: ignore[assignment]
+    code, message = _classify(rogue)
+    assert code == "internal", f"an off-contract code escaped as {code!r}"
+    assert code in RATIFIED
+    # The message survives (it is server-authored and sanitized elsewhere); only the
+    # code is severed.
+    assert message == "hostile"

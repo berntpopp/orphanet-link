@@ -7,6 +7,9 @@ from typing import Annotated, Any, Literal
 from fastmcp.tools.tool import ToolResult
 from pydantic import Field
 
+from orphanet_link.constants import XrefSource
+from orphanet_link.services.compose import IncludableSection
+
 #: What every tool body returns. The happy path is the plain envelope dict (FastMCP
 #: serialises it into ``structuredContent``); the ERROR path is a ``ToolResult`` so the
 #: envelope can also carry MCP's ``isError: true``. A returned dict can never set
@@ -91,12 +94,30 @@ FieldsArg = Annotated[
     ),
 ]
 
+#: A CLOSED array vocabulary -- the item type is a ``Literal``, so an ``enum`` appears
+#: under ``items`` in the advertised schema and pydantic rejects an unrecognised section
+#: (e.g. ``["natural_history"]``) with invalid_input BEFORE the tool body runs, instead of
+#: it being schema-valid and failing at runtime.
 IncludeArg = Annotated[
-    list[str] | None,
+    list[IncludableSection] | None,
     Field(
         description="Compose extra association sections into the single record "
         "(any of: genes, phenotypes, prevalence, disability) so a full entity needs "
         "one call instead of a per-section fan-out. Omit for the base record only.",
         examples=[["genes", "phenotypes", "prevalence"], ["genes"]],
+    ),
+]
+
+#: A CLOSED array vocabulary (the xref-source set). Item ``enum`` in the schema, so an
+#: unrecognised prefix is rejected with invalid_input rather than silently matching
+#: nothing -- ``prefixes=["__BOGUS__"]`` used to return ``count: 0, success: true``,
+#: indistinguishable from a disorder with no such cross-references.
+PrefixesArg = Annotated[
+    list[XrefSource] | None,
+    Field(
+        description="Restrict the cross-reference sources returned to this subset "
+        "(any of the xref sources: OMIM/MONDO/ICD-10/ICD-11/UMLS/GARD/MeSH/MedDRA). "
+        "Omit to return every source.",
+        examples=[["OMIM", "MONDO"]],
     ),
 ]

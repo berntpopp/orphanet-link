@@ -20,6 +20,7 @@ from fastmcp.tools.tool import ToolResult
 from mcp.types import TextContent
 from pydantic import ValidationError as PydanticValidationError
 
+from orphanet_link.constants import ERROR_CODES, ErrorCode
 from orphanet_link.exceptions import (
     AmbiguousQueryError,
     DataUnavailableError,
@@ -57,9 +58,13 @@ _DATA_UNAVAILABLE_MESSAGE = (
 # and those three are tiered by response_mode (see _shape_meta).
 #
 # Every code here is in the CLOSED enum of Response-Envelope Standard v1
-# (capabilities.ERROR_CODES). See _classify for the three legacy codes this backend
+# (constants.ERROR_CODES). See _classify for the three legacy codes this backend
 # invented and where they now land.
 _RETRYABLE = {"rate_limited", "upstream_unavailable"}
+
+#: The closed enum as a set, for the runtime backstop in _classify (the ONE branch that
+#: does not hardcode its code is McpToolError, which returns error_code verbatim).
+_CLOSED_ERROR_CODES: frozenset[str] = frozenset(ERROR_CODES)
 
 
 @dataclass
@@ -79,12 +84,19 @@ class McpErrorContext:
 
 
 class McpToolError(Exception):
-    """Raised inside a tool body to emit a specific error code/message."""
+    """Raised inside a tool body to emit a specific error code/message.
 
-    def __init__(self, *, error_code: str, message: str) -> None:
+    ``error_code`` is typed ``ErrorCode`` (the closed Response-Envelope v1 enum), so a
+    caller cannot pass a code of their own invention -- mypy rejects it at the call site.
+    ``_classify`` additionally re-checks it against the enum at runtime and severs anything
+    outside to ``internal``, because a type annotation is not enforced by the interpreter
+    and this value is echoed verbatim onto an ``isError: true`` envelope's ``error_code``.
+    """
+
+    def __init__(self, *, error_code: ErrorCode, message: str) -> None:
         """Store an error code and client-safe message."""
         super().__init__(message)
-        self.error_code = error_code
+        self.error_code: ErrorCode = error_code
         self.message = message
 
 
@@ -134,7 +146,14 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         The same meaning; the enum simply spells it ``internal``.
     """
     if isinstance(exc, McpToolError):
-        return exc.error_code, exc.message
+        # error_code is typed ErrorCode, but a type annotation is not enforced by the
+        # interpreter, and this value is echoed VERBATIM onto the wire (it is the only
+        # branch that does not hardcode its code). Re-check against the closed enum and
+        # sever anything outside to `internal` so an off-contract code -- e.g. from a
+        # miswritten raise, or a runtime that ignored the type -- can never be advertised.
+        if exc.error_code in _CLOSED_ERROR_CODES:
+            return exc.error_code, exc.message
+        return "internal", exc.message
     if isinstance(exc, NotFoundError):  # WithdrawnEntryError subclasses this
         return "not_found", _safe_message(exc)
     if isinstance(exc, AmbiguousQueryError):

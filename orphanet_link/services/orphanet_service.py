@@ -9,6 +9,7 @@ collapsing ambiguity.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -23,13 +24,12 @@ from orphanet_link.services.shaping import (
     group_xrefs,
     shape,
     shape_search_hit,
+    validate_fields,
 )
 
-# NOTE: this module is the DATA plane -- it returns plain dicts with bare-string
-# free-text (definition / definition_snippet). The Response-Envelope v1.1
-# untrusted_text fencing is applied at the MCP serialization boundary
-# (orphanet_link/mcp/untrusted_fencing.py), never here, so the data plane carries
-# no dependency on the MCP plane.
+# NOTE: this is the DATA plane -- plain dicts with bare-string free-text. The
+# Response-Envelope v1.1 untrusted_text fencing is applied at the MCP serialization
+# boundary (mcp/untrusted_fencing.py), never here, so the data plane has no MCP dep.
 
 _MAX_LIMIT = 1000
 
@@ -160,7 +160,7 @@ class OrphanetService:
         term: str,
         response_mode: str = DEFAULT_RESPONSE_MODE,
         fields: list[str] | None = None,
-        include: list[str] | None = None,
+        include: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         """Return the full disease record, optionally composing extra sections.
 
@@ -190,6 +190,7 @@ class OrphanetService:
         }
         if include:
             payload.update(compose_sections(self.repo, code, include))
+        validate_fields(payload, fields)
         return shape(payload, response_mode, fields=fields)
 
     def get_disease_genes(
@@ -372,7 +373,7 @@ class OrphanetService:
     def map_cross_ontology(
         self,
         term: str,
-        prefixes: list[str] | None = None,
+        prefixes: Sequence[str] | None = None,
         response_mode: str = DEFAULT_RESPONSE_MODE,
     ) -> dict[str, Any]:
         """Return all cross-ontology mappings for a disorder, grouped by source."""
@@ -493,7 +494,6 @@ class OrphanetService:
             "orphanet_version": self._orphanet_version(),
         }
 
-    # NOTE: batch is implemented in the MCP tool layer (mcp/tools/batch.py), which
-    # loops these single-item methods and shapes per-item {ok, error_code, ...} rows
-    # via the shared classify_exception. No service-level *_batch helpers exist (a
-    # prior pair returned a divergent {success, error} shape and were unused).
+    # NOTE: batch lives in the MCP tool layer (mcp/tools/batch.py); it loops these
+    # single-item methods and shapes per-item {ok, error_code, ...} rows via the shared
+    # classify_exception. No service-level *_batch helpers exist (a prior divergent pair).

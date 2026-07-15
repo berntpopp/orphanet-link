@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from orphanet_link import __version__
 from orphanet_link.buildinfo import build_info
 from orphanet_link.constants import (
+    ERROR_CODES,
     MATCH_TYPES,
     MAX_BATCH_ITEMS,
     ORPHANET_LICENSE,
@@ -30,22 +31,10 @@ from orphanet_link.services.shaping import DEFAULT_RESPONSE_MODE, RESPONSE_MODES
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-#: Error taxonomy surfaced by every tool (see orphanet_link.mcp.envelope).
-#:
-#: The CLOSED enum of Response-Envelope Standard v1 — exactly these six, and nothing
-#: else. orphanet-link used to ship three codes of its own invention
-#: (``data_unavailable``, ``limit_exceeded``, ``internal_error``); a client written
-#: against the fleet contract had no branch for any of them. They are folded onto the
-#: canon in :func:`orphanet_link.mcp.envelope._classify`, which is the single place
-#: the mapping happens.
-ERROR_CODES: list[str] = [
-    "invalid_input",
-    "not_found",
-    "ambiguous_query",
-    "upstream_unavailable",
-    "rate_limited",
-    "internal",
-]
+# NOTE: ``ERROR_CODES`` (imported above from ``constants``) is the CLOSED enum of
+# Response-Envelope Standard v1 -- the single source of truth, declared there as a
+# ``Literal`` so it is a checkable type, not just a list, and re-exported through this
+# module for the discovery payload and the doc-drift guard. Never a second copy.
 
 #: Frozen tool surface. capabilities.TOOLS must equal the registered tool set.
 TOOLS: list[str] = [
@@ -209,9 +198,11 @@ def build_capabilities() -> dict[str, Any]:
             "mode (the caller has opted out of all non-essential _meta)."
         ),
         "field_projection": (
-            "get_disease and map_cross_ontology accept fields=[...] for a sparse "
-            "projection: top-level keys, or dotted into a group (e.g. 'xrefs.OMIM'). "
-            "Identity anchors (orpha_code, name, orphanet_version) are always returned."
+            "get_disease accepts fields=[...] for a sparse projection: top-level keys, "
+            "or dotted into a group (e.g. 'xrefs.OMIM'). Identity anchors (orpha_code, "
+            "name, orphanet_version) are always returned. To restrict map_cross_ontology "
+            "to a subset of sources use its prefixes=[...] argument (an unrecognised "
+            "prefix is rejected with invalid_input, never silently dropped)."
         ),
         "id_normalization": (
             "ORPHAcodes accepted/returned as both 'ORPHA:166024' and '166024'; "
@@ -239,7 +230,10 @@ def build_capabilities() -> dict[str, Any]:
             "(default) drops null/empty values recursively (including inside nested "
             "rows such as per-phenotype diagnostic_criteria), collapses synonyms to "
             "plain strings, and returns search hits as orpha_code + name + score + a "
-            "short definition_snippet; minimal keeps only orpha_code + name."
+            "short definition_snippet; minimal returns the identity anchors, every "
+            "populated collection with each record narrowed to its stable identifiers "
+            "(e.g. genes as gene_symbol + hgnc_id), and every count/pagination field -- "
+            "it narrows each record, it never drops a collection or its count."
         ),
         "match_type_semantics": (
             "resolve_disease.match_type is one of orpha_code | exact_label | search "

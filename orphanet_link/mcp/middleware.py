@@ -94,16 +94,24 @@ class ArgValidationMiddleware(Middleware):
         first = exc.errors(include_url=False)[0]
         loc = ".".join(str(p) for p in first.get("loc", ())) or "input"
         error_type = str(first.get("type", "value_error"))
+        # The failing param may be a top-level name (``prefixes``) OR an item of an
+        # array param (``prefixes.0`` for a bad element of a list[Literal] vocabulary).
+        # Resolve to the base parameter so a bad ARRAY ITEM surfaces its item enum,
+        # instead of being misread as an unknown argument named "prefixes.0".
+        base = loc.split(".", 1)[0]
         # A real param with a bad *value* -> surface the constraint (enum/range)
         # or, failing that, the expected type + an example -- never the list of
         # argument names (which is reserved for genuinely unknown arguments).
         constraints = None
-        if loc in valid and error_type not in ("missing", "missing_argument"):
-            field_schema = schema.get("properties", {}).get(loc, {})
+        target = loc if loc in valid else (base if base in valid else None)
+        if target is not None and error_type not in ("missing", "missing_argument"):
+            field_schema = schema.get("properties", {}).get(target, {})
             constraints = describe_constraints(field_schema) or describe_type_expectation(
                 field_schema
             )
-        suggestion = did_you_mean(loc, valid) if loc not in valid else None
+        # Only offer a name suggestion when the argument itself is unknown -- not when a
+        # valid array param merely got a bad item (base in valid).
+        suggestion = did_you_mean(loc, valid) if loc not in valid and base not in valid else None
         envelope = build_arg_error_envelope(
             tool_name=name,
             loc=loc,

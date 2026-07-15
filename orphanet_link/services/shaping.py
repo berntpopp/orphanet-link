@@ -36,7 +36,11 @@ with no third bucket.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
+
+from orphanet_link.constants import XREF_SOURCES
+from orphanet_link.exceptions import InvalidInputError
 
 RESPONSE_MODES: list[str] = ["minimal", "compact", "standard", "full"]
 DEFAULT_RESPONSE_MODE = "compact"
@@ -242,6 +246,32 @@ def _select_fields(
     return out
 
 
+def validate_fields(payload: dict[str, Any], fields: Sequence[str] | None) -> None:
+    """Reject a ``fields`` projection that names a key the record does not have.
+
+    ``fields`` is an open-world projection (its valid values are the record's own keys,
+    which depend on ``include=``), so it cannot be a static schema ``enum``. But an
+    unrecognised field was silently skipped by :func:`_select_fields`, so
+    ``fields=["__bogus__"]`` returned just the anchors with ``success: true`` -- the same
+    silent-empty class as an unrecognised filter, forbidden by Response-Envelope v1.1.
+    Each field's top-level key (``xrefs.OMIM`` -> ``xrefs``) is checked against the built
+    record, and an unknown one raises ``invalid_input`` naming it and listing what IS
+    projectable -- including the sections only ``include=`` adds, so recovery is obvious.
+    """
+    if not fields:
+        return
+    projectable = [k for k in payload if k not in _PRESERVE_KEYS]
+    unknown = sorted({f.partition(".")[0] for f in fields} - set(projectable))
+    if unknown:
+        raise InvalidInputError(
+            f"fields references unknown key(s): {unknown}. Projectable keys for this "
+            f"record: {sorted(projectable)}. Sections genes/phenotypes/prevalence/"
+            "disability are only present when requested via include=.",
+            field="fields",
+            allowed=sorted(projectable),
+        )
+
+
 def shape_search_hit(
     hit: dict[str, Any], mode: str, *, snippet_chars: int = SEARCH_SNIPPET_CHARS
 ) -> dict[str, Any]:
@@ -285,12 +315,28 @@ def _snippet(text: str, limit: int) -> str:
 
 def group_xrefs(
     xrefs: list[dict[str, Any]],
-    prefixes: list[str] | None = None,
+    prefixes: Sequence[str] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Group cross-references by source (OMIM, MONDO, ICD-10 …).
 
-    When ``prefixes`` is non-empty, only those sources are retained.
+    When ``prefixes`` is non-empty, only those sources are retained -- and an
+    UNRECOGNISED prefix raises ``invalid_input`` rather than silently matching nothing.
+    The schema already declares ``prefixes`` as a closed enum, so a compliant client is
+    rejected at binding; this is the runtime backstop for anyone who bypasses the schema
+    (a direct service call, a client that does not validate). Declaring the enum AND
+    enforcing it is the same belt-and-suspenders ``frequency`` uses -- a schema more
+    permissive than the runtime is the harmful direction, and here they agree.
     """
+    if prefixes:
+        valid = {s.upper() for s in XREF_SOURCES}
+        unknown = sorted({p for p in prefixes if p.strip() and p.upper() not in valid})
+        if unknown:
+            raise InvalidInputError(
+                f"prefixes references unknown xref source(s): {unknown}. "
+                f"Valid sources: {XREF_SOURCES}.",
+                field="prefixes",
+                allowed=list(XREF_SOURCES),
+            )
     prefixes_upper: set[str] | None = (
         {p.upper() for p in prefixes if p.strip()} if prefixes else None
     )

@@ -10,7 +10,13 @@ from orphanet_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool
 from orphanet_link.mcp.next_commands import after_cross_ontology, after_resolve_xref
 from orphanet_link.mcp.service_adapters import get_orphanet_service
-from orphanet_link.mcp.tools._common import ResponseMode, TermStr, ToolReturn, XrefIdStr
+from orphanet_link.mcp.tools._common import (
+    PrefixesArg,
+    ResponseMode,
+    TermStr,
+    ToolReturn,
+    XrefIdStr,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -77,13 +83,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
     )
     async def map_cross_ontology(
         term: TermStr,
-        prefixes: Annotated[
-            list[str] | None,
-            Field(
-                description="Restrict to these source prefixes, e.g. ['OMIM', 'MONDO'].",
-                examples=[["OMIM", "MONDO"]],
-            ),
-        ] = None,
+        prefixes: PrefixesArg = None,
         response_mode: ResponseMode = "compact",
     ) -> ToolReturn:
         async def call() -> dict[str, Any]:

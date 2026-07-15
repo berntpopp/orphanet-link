@@ -14,7 +14,14 @@ from typing import Literal, get_args
 SCHEMA_VERSION = 1
 
 #: Cross-reference source vocabularies carried in product 1 (no SNOMED / ICD-9).
-XREF_SOURCES = [
+#:
+#: A CLOSED vocabulary, and the type is its single source of truth. Declaring it as a
+#: ``Literal`` puts an ``enum`` in the advertised schema of every parameter that takes
+#: one (Tool-Schema Documentation Standard S4) -- including the ARRAY-typed
+#: ``map_cross_ontology.prefixes``, which shipped as a bare ``list[str]``: an
+#: unrecognised prefix matched nothing and returned ``count: 0, success: true``,
+#: indistinguishable from a disorder with no such cross-references.
+XrefSource = Literal[
     "OMIM",
     "MONDO",
     "ICD-10",
@@ -24,6 +31,9 @@ XREF_SOURCES = [
     "MeSH",
     "MedDRA",
 ]
+
+#: DERIVED from the type above -- never a second hand-maintained copy of the list.
+XREF_SOURCES: list[str] = list(get_args(XrefSource))
 
 #: Gene cross-reference sources carried in product 6 -> ``gene`` column.
 GENE_XREF_COLUMN = {
@@ -94,14 +104,35 @@ def citation(version: str | None) -> str:
 
 # --- MCP capability surface constants ----------------------------------------
 
-#: Cross-reference prefixes surfaced by map_cross_ontology / resolve_xref.
-XREF_PREFIXES: list[str] = ["OMIM", "MONDO", "ICD-10", "ICD-11", "UMLS", "GARD", "MeSH", "MedDRA"]
+#: Cross-reference prefixes surfaced by map_cross_ontology / resolve_xref. This IS the
+#: xref-source vocabulary (same closed set), not a second copy of it -- a prior third
+#: hand-maintained duplicate here was exactly the drift risk this aliases away.
+XREF_PREFIXES: list[str] = XREF_SOURCES
 
 #: Mapping-relation codes ranked by precision (used in capabilities discovery).
 PREDICATE_RANK: dict[str, int] = dict(MAPPING_RELATION_RANK)
 
 #: Match types returned by resolve_disease (mirrors resolution.py cascade).
 MATCH_TYPES: list[str] = ["orpha_code", "xref", "exact_label", "search"]
+
+#: The CLOSED error taxonomy of Response-Envelope Standard v1 -- exactly these six, and
+#: nothing else. Declared as a type so the constraint is CHECKABLE, not merely written
+#: down: ``McpToolError`` takes an ``ErrorCode``, so a code of one's own invention cannot
+#: be constructed, and ``_classify`` refuses to put one on the wire even if it somehow is.
+#: (It used to pass ``McpToolError.error_code`` through verbatim, so any string a caller
+#: of that constructor chose -- e.g. "outside_contract" -- became the advertised
+#: ``error_code`` of an ``isError: true`` envelope.)
+ErrorCode = Literal[
+    "invalid_input",
+    "not_found",
+    "ambiguous_query",
+    "upstream_unavailable",
+    "rate_limited",
+    "internal",
+]
+
+#: DERIVED from the type above -- never a second hand-maintained copy of the list.
+ERROR_CODES: list[str] = list(get_args(ErrorCode))
 
 #: Hard cap on items per batch call.
 MAX_BATCH_ITEMS: int = 50
