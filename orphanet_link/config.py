@@ -11,6 +11,7 @@ Release), is the only data source.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -97,6 +98,13 @@ class OrphanetDataConfig(BaseModel):
         default="latest",
         description="Release tag to fetch the prebuilt DB from ('latest' or 'data-<version>').",
     )
+    bundle_expected_sha256: str | None = Field(
+        default=None,
+        description=(
+            "Optional SHA-256 pin for the compressed prebuilt database artifact. "
+            "Production init sidecars set this from container-release.json."
+        ),
+    )
     auto_bootstrap: bool = Field(
         default=True,
         description="Ensure the database exists on first use (fetch prebuilt or build).",
@@ -154,6 +162,17 @@ class OrphanetDataConfig(BaseModel):
     @classmethod
     def _ensure_trailing_slash(cls, v: str) -> str:
         return v if v.endswith("/") else f"{v}/"
+
+    @field_validator("bundle_expected_sha256")
+    @classmethod
+    def _normalize_bundle_expected_sha256(cls, v: str | None) -> str | None:
+        """Accept an optional ``sha256:`` prefix while requiring an exact digest."""
+        if v is None:
+            return None
+        digest = v.removeprefix("sha256:").lower()
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("bundle_expected_sha256 must be exactly 64 hexadecimal characters")
+        return digest
 
 
 class ServerSettings(BaseSettings):

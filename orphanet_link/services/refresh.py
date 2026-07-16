@@ -2,9 +2,9 @@
 
 The in-process scheduler is OFF by default (``config.refresh_enabled=False``).
 Orphanet releases are bi-annual; refresh is best driven by the CI artifact
-pipeline + an external cron.  ``bootstrap_data`` ensures the database exists
-on first start — non-fatal: the server still starts and tools report
-``data_unavailable`` until the build lands.
+pipeline + an external cron. When ``auto_bootstrap`` is enabled,
+``bootstrap_data`` ensures the database exists on first start — non-fatal: the
+server still starts and tools report ``data_unavailable`` until the build lands.
 """
 
 from __future__ import annotations
@@ -21,12 +21,16 @@ if TYPE_CHECKING:
 
 
 async def bootstrap_data(config: OrphanetDataConfig, logger: Any) -> None:
-    """Ensure the local index exists; runs in a worker thread. Non-fatal.
+    """Ensure the local index when enabled; runs in a worker thread. Non-fatal.
 
     Args:
         config: Active data-store configuration.
         logger: structlog (or stdlib logging) logger for status messages.
     """
+    if not config.auto_bootstrap:
+        logger.info("orphanet_data_bootstrap_disabled")
+        return
+
     from orphanet_link.services.data_resolver import ensure_database
 
     try:

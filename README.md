@@ -50,7 +50,9 @@ claude mcp add --transport http orphanet-link http://127.0.0.1:8000/mcp
 
 The server needs a database before it can answer. `make data-fetch` pulls the prebuilt one
 published by CI; `make data` builds it from the Orphadata XML instead (~150 MB). Either way the
-server also bootstraps one on first start when none is present — see [Data](docs/data.md).
+local server also bootstraps one on first start when none is present — see [Data](docs/data.md).
+Production uses the hardened init sidecar to fetch and verify its pinned release before the app
+starts with a read-only snapshot.
 
 `make dev` runs `--transport unified`, the **only** mode that serves MCP; `--transport http` is
 REST/health-only. `make docker-up` runs the container stack and prints its MCP URL. See
@@ -97,9 +99,10 @@ distribution of Orphanet (INSERM, Paris). Eight English XML products, downloaded
 authentication.
 
 **Refresh** — Orphanet releases bi-annually. CI rebuilds the index weekly and publishes it as a
-versioned `data-<release>` GitHub Release (`orphanet.sqlite.gz`); the server fetches that artifact,
-verifies its sha256, and falls back to a local build when it is unavailable. `make data-status`
-prints the loaded release. Details: [Data & the build pipeline](docs/data.md).
+versioned `data-<release>` GitHub Release (`orphanet.sqlite.gz`). Local development can fetch that
+artifact, verify its sha256, and fall back to a local build; production's init sidecar verifies the
+declared immutable digest and the app only reads the resulting snapshot. `make data-status` prints
+the loaded release. Details: [Data & the build pipeline](docs/data.md).
 
 **Licence** — Orphadata are **CC BY 4.0**. Redistributing a *derived* SQLite database is explicitly
 permitted provided attribution is given and changes are indicated.

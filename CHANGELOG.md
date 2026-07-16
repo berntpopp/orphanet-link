@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-14
+
+MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2
+UNGATED tools to 0 failures and 0 UNGATED**, and the advertised tool surface fell from
+**9,913 to 6,081 tokens**. Every defect below was green in CI: none of them were visible
+to a unit-test suite that never spoke MCP to a running server, which is why the gate is
+now vendored in and run against the container on every PR.
+
+### Security
+
+- **Production now materializes the pinned external snapshot in a hardened init sidecar
+  (issue #23).** `orphanet-data-init` verifies the immutable bundle digest and writes the
+  versioned volume before the serving process starts. The application mounts that snapshot
+  read-only with auto-bootstrap and in-process refresh disabled; it no longer has production
+  egress or data-volume write access.
+
 ### Fixed
 
 Follow-up to the [#28] review — a hardened behaviour gate (which now sees array-item enums
@@ -43,27 +59,6 @@ classes, and one the audit had missed.
   enum: `invalid_input`, *"each item must be one of: OMIM, MONDO, ICD-10, …"*, with the
   values in `allowed_values` — an error a model can self-correct from in one step.
 
-### Changed
-
-- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
-  (`docs/conformance/behaviour.py` blob `c69801687`) and live-validated this
-  backend against the current behaviour gate.
-- `XREF_SOURCES`, `ERROR_CODES`, the HPO-frequency and include vocabularies are now each
-  declared **once** as a `Literal` and derived into their list forms — a bare
-  hand-maintained `XREF_PREFIXES` duplicate (a third copy of the same eight strings) is
-  aliased away. `test_pagination_invariants` derives the set of paginated tools from the
-  registry instead of hardcoding six, so a new list tool cannot ship untested.
-
-## [0.4.0] - 2026-07-14
-
-MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2
-UNGATED tools to 0 failures and 0 UNGATED**, and the advertised tool surface fell from
-**9,913 to 6,081 tokens**. Every defect below was green in CI: none of them were visible
-to a unit-test suite that never spoke MCP to a running server, which is why the gate is
-now vendored in and run against the container on every PR.
-
-### Fixed
-
 - **CRITICAL — `response_mode="minimal"` discarded the entire payload and still reported
   `success: true`.** It kept the identity anchors and nothing else, so
   `get_disease_genes(term="ORPHA:33069", response_mode="minimal")` answered with no
@@ -93,6 +88,15 @@ now vendored in and run against the container on every PR.
   `maxLength`, so an over-long call is rejected (567 chars, value not echoed).
 
 ### Changed
+
+- Re-vendored the behaviour conformance gate from genefoundry-router `56db958`
+  (`docs/conformance/behaviour.py` blob `c69801687`) and live-validated this
+  backend against the current behaviour gate.
+- `XREF_SOURCES`, `ERROR_CODES`, the HPO-frequency and include vocabularies are now each
+  declared **once** as a `Literal` and derived into their list forms — a bare
+  hand-maintained `XREF_PREFIXES` duplicate (a third copy of the same eight strings) is
+  aliased away. `test_pagination_invariants` derives the set of paginated tools from the
+  registry instead of hardcoding six, so a new list tool cannot ship untested.
 
 - **BREAKING — `error_code` is now the closed Response-Envelope v1 enum**
   (`invalid_input`, `not_found`, `ambiguous_query`, `upstream_unavailable`, `rate_limited`,

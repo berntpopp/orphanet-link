@@ -8,6 +8,41 @@
 # would NOT drop the base "<host>:8000" mapping and the endpoint would stay
 # published on the public IP. The container is reachable only via the proxy.
 services:
+  # This short-lived service owns the only production egress and write access
+  # needed to materialize the immutable Orphanet snapshot. It must complete
+  # before the serving process is started.
+  orphanet-data-init:
+    build: !reset null
+    image: "${ORPHANET_LINK_IMAGE:?ORPHANET_LINK_IMAGE must be set to ghcr.io/berntpopp/orphanet-link@sha256:<digest>}"
+    pull_policy: missing
+    entrypoint: !override ["orphanet-link-data", "fetch"]
+    environment:
+      ORPHANET_LINK_DATA__DATA_DIR: /data/data-1.3.42-4.1.8-2025-03-03
+      ORPHANET_LINK_DATA__RELEASE_TAG: data-1.3.42-4.1.8-2025-03-03
+      ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256: a8af3fc39cca2acedd12c188cb0e1f907ac320e73d2b965c17ad5a28c5f5fe38
+    volumes: !override
+      - orphanet-data:/data
+    read_only: true
+    tmpfs: !override
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    security_opt: !override
+      - no-new-privileges:true
+    cap_drop: !override
+      - ALL
+    init: true
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+          pids: 128
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   orphanet-link:
     build: !reset null
     image: "${ORPHANET_LINK_IMAGE:?ORPHANET_LINK_IMAGE must be set to ghcr.io/berntpopp/orphanet-link@sha256:<digest>}"
@@ -17,14 +52,19 @@ services:
     environment:
       ORPHANET_LINK_LOG_LEVEL: INFO
       ORPHANET_LINK_LOG_FORMAT: json
-      ORPHANET_LINK_DATA__DATA_DIR: /data
+      ORPHANET_LINK_DATA__DATA_DIR: /data/data-1.3.42-4.1.8-2025-03-03
+      ORPHANET_LINK_DATA__AUTO_BOOTSTRAP: "false"
+      ORPHANET_LINK_DATA__REFRESH_ENABLED: "false"
       ORPHANET_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","orphanet-link.genefoundry.org"]'
       GF_HEALTHCHECK_HOST: localhost
+    depends_on:
+      orphanet-data-init:
+        condition: service_completed_successfully
     ports: !reset []
     expose:
       - "8000"
     volumes: !override
-      - orphanet-data:/data
+      - orphanet-data:/data:ro
     read_only: true
     tmpfs: !override
       - /tmp:rw,noexec,nosuid,size=512m,mode=1777

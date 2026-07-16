@@ -63,10 +63,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ORPHANET_LINK_TRANSPORT=unified \
     ORPHANET_LINK_MCP_PATH=/mcp \
     ORPHANET_LINK_DATA__DATA_DIR=/data \
-    # The entrypoint bootstraps the database before the server starts.
+    # Local Compose opts in; production uses a hardened init sidecar.
     # Refresh is owned by the CI artifact pipeline + external cron, so the
     # in-app scheduler stays OFF.
-    ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true \
+    ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=false \
     ORPHANET_LINK_DATA__REFRESH_ENABLED=false \
     TMPDIR=/tmp
 
@@ -139,10 +139,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ORPHANET_LINK_TRANSPORT=unified \
     ORPHANET_LINK_MCP_PATH=/mcp \
     ORPHANET_LINK_DATA__DATA_DIR=/data \
-    # The entrypoint bootstraps the database before the server starts.
+    # Local Compose opts in; production uses a hardened init sidecar.
     # Refresh is owned by the CI artifact pipeline + external cron, so the
     # in-app scheduler stays OFF.
-    ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true \
+    ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=false \
     ORPHANET_LINK_DATA__REFRESH_ENABLED=false \
     TMPDIR=/tmp
 WORKDIR /home/app/web
@@ -155,7 +155,7 @@ EXPOSE 8000
 # Mount a volume there so the database persists across container restarts.
 VOLUME ["/data"]
 
-# start-period covers the entrypoint's first bootstrap (fetch prebuilt or local build).
+# Local Compose may bootstrap before health is ready; production uses an init sidecar.
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=120s \
     CMD curl -f http://127.0.0.1:8000/health || exit 1
 

@@ -50,6 +50,7 @@ semantics: [Deployment → Host / Origin / CORS](deployment.md).
 | `DATA__PREFER_PREBUILT` | `true` | Try the GitHub Release artifact before building locally. |
 | `DATA__RELEASE_REPO` | `berntpopp/orphanet-link` | Host of the release assets. |
 | `DATA__RELEASE_TAG` | `latest` | Resolves to the newest `data-*` release, or pin e.g. `data-1.3.42`. |
+| `DATA__BUNDLE_EXPECTED_SHA256` | unset | Exact SHA-256 for the compressed artifact; production init sidecars require it. |
 | `DATA__AUTO_BOOTSTRAP` | `true` | Ensure the database exists on first use. Set `false` only when managing the database lifecycle externally. |
 
 See [Data](data.md) for the pipeline these knobs drive.
