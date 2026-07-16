@@ -40,12 +40,16 @@ in `docker/.env` to move it off 8000 (useful when sibling `-link` projects are
 running). Because the host port is therefore not fixed, `make docker-up` prints
 the resulting MCP URL rather than assuming one.
 
-On first boot the entrypoint bootstraps the database (prebuilt fetch, falling back
-to a local build); see [Data](data.md). A bootstrap failure there is non-fatal —
-the app lifespan retries on startup.
+The base Compose file is for local development and enables an in-process bootstrap
+(prebuilt fetch, falling back to a local build); see [Data](data.md). Production
+uses the hardened `orphanet-data-init` sidecar to fetch and verify the release
+pinned in `container-release.json`. The application waits for that service to
+complete successfully, mounts its versioned read-only snapshot, and has no
+in-process bootstrap path or write access to the data volume.
 
 Overlays: `docker/docker-compose.prod.yml` (hardened production) and
-`docker/docker-compose.npm.yml` (Nginx Proxy Manager). Backends are
+`docker/docker-compose.npm.yml` (Nginx Proxy Manager; the same init-sidecar
+boundary). Backends are
 **unauthenticated by design** and must be reachable only through the router or a
 reverse proxy — never published directly to the internet.
 

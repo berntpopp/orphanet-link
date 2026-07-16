@@ -1,17 +1,47 @@
 # Nginx Proxy Manager deployment overlay for orphanet-link.
 #
-# Self-contained (used standalone, not layered on docker-compose.yml): one
-# unified container serves the FastAPI REST API on / and the MCP streamable-HTTP
-# transport on /mcp via a single port (8000). NPM reverse-proxies to the fixed
-# container_name on the shared external npm_default network. Mirrors the
-# gtex-link / mgi-link / mondo-link fleet pattern. First boot fetches the
-# prebuilt Orphanet SQLite database from the GitHub Release (or builds locally
-# from Orphadata XML) into the persisted data volume.
+# Self-contained (used standalone, not layered on docker-compose.yml): a
+# short-lived init sidecar fetches the pinned Orphanet SQLite snapshot, then the
+# unified container serves FastAPI REST on / and Streamable HTTP MCP on /mcp.
+# NPM reverse-proxies to the fixed container_name on the shared external
+# npm_default network. The application mounts its snapshot read-only and cannot
+# bootstrap data itself.
 #
 #   docker compose -f docker/docker-compose.npm.yml --env-file .env.docker up -d
 name: orphanet-link-npm
 
 services:
+  orphanet-data-init:
+    image: ${ORPHANET_LINK_IMAGE:?Set ORPHANET_LINK_IMAGE to ghcr.io/berntpopp/orphanet-link@sha256:<digest>}
+    pull_policy: missing
+    entrypoint: ["orphanet-link-data", "fetch"]
+    environment:
+      - ORPHANET_LINK_DATA__DATA_DIR=/data/data-1.3.42-4.1.8-2025-03-03
+      - ORPHANET_LINK_DATA__RELEASE_TAG=data-1.3.42-4.1.8-2025-03-03
+      - ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256=a8af3fc39cca2acedd12c188cb0e1f907ac320e73d2b965c17ad5a28c5f5fe38
+    volumes:
+      - orphanet-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    init: true
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+          pids: 128
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   orphanet_link:
     # Deploy pulls the released, attested image; it never builds from source.
     # Pin a digest, not a tag: there is no `latest`, and only a digest is immutable.
@@ -29,16 +59,12 @@ services:
       - 'ORPHANET_LINK_ALLOWED_HOSTS=["localhost","127.0.0.1","::1","orphanet-link.genefoundry.org"]'
       - ORPHANET_LINK_LOG_LEVEL=${LOG_LEVEL_API:-INFO}
       - ORPHANET_LINK_LOG_FORMAT=json
-      - ORPHANET_LINK_DATA__DATA_DIR=/data
-      # Fetch prebuilt DB from GitHub Release on first boot (persisted in the volume).
-      - ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true
-      - ORPHANET_LINK_DATA__PREFER_PREBUILT=true
-      # No in-app scheduler in the NPM deploy; Orphanet releases are bi-annual,
-      # so refresh stays manual (host: docker compose ... exec orphanet-link-npm
-      # uv run python -c "...ensure_database(...)"). The persisted DB serves until then.
+      - ORPHANET_LINK_DATA__DATA_DIR=/data/data-1.3.42-4.1.8-2025-03-03
+      - ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=false
       - ORPHANET_LINK_DATA__REFRESH_ENABLED=false
-    # The image ENTRYPOINT bootstraps the DB then exec's the unified server,
-    # reading ORPHANET_LINK_TRANSPORT/HOST/PORT above; no command override needed.
+    depends_on:
+      orphanet-data-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://127.0.0.1:8000/health"]
       interval: 30s
@@ -52,8 +78,8 @@ services:
       # TMPDIR=/tmp (set in the image) - download/build scratch space.
       - /tmp:rw,noexec,nosuid,size=512m,mode=1777
     volumes:
-      # Persist the Orphanet SQLite database across container restarts.
-      - orphanet-data:/data
+      # The init sidecar materializes the immutable snapshot before this app starts.
+      - orphanet-data:/data:ro
     networks:
       - orphanet_link_internal_net
       - npm_proxy_network

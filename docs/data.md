@@ -44,10 +44,12 @@ validated by Orphanet or INSERM.
 
 ### Option A — prebuilt artifact (default, fastest)
 
-The server auto-fetches the latest prebuilt `orphanet.sqlite.gz` from the GitHub
-Release on first startup when `ORPHANET_LINK_DATA__PREFER_PREBUILT=true` (the
-default) and `ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true` (the default). No manual
-step is required.
+Local development auto-fetches the latest prebuilt `orphanet.sqlite.gz` from the
+GitHub Release on first startup when `ORPHANET_LINK_DATA__PREFER_PREBUILT=true`
+(the default) and `ORPHANET_LINK_DATA__AUTO_BOOTSTRAP=true` (the default). No
+manual step is required. Production uses its hardened init sidecar to fetch the
+specific pinned release, verify its declared SHA-256, and materialize the
+read-only application snapshot.
 
 To force a fetch up front:
 
@@ -99,7 +101,7 @@ to GitHub Releases:
   `data-<version>` → exit early if a Release for that tag already exists
   (idempotent) → gzip → write `.sha256` + `manifest.json` → create the Release.
 
-**Runtime (`services/data_resolver.py`)**, on server start with
+**Runtime (`services/data_resolver.py`)**, on local/development server start with
 `AUTO_BOOTSTRAP=true`:
 
 1. If `DATA__PREFER_PREBUILT=true`: fetch the latest `data-*` Release asset
@@ -110,4 +112,6 @@ to GitHub Releases:
 
 An incompatible prebuilt database triggers a local rebuild rather than a crash.
 Pin a specific release with `ORPHANET_LINK_DATA__RELEASE_TAG=data-<version>`; see
-[Configuration](configuration.md).
+[Configuration](configuration.md). Production calls `orphanet-link-data fetch`
+from its init sidecar, with both this release tag and its immutable
+`DATA__BUNDLE_EXPECTED_SHA256` configured; it does not fall back to a local build.

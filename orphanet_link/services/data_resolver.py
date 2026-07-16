@@ -241,6 +241,11 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
                 "Invalid SHA-256 sidecar: expected exactly 64 hex characters."
             )
         actual_hex = digest.hexdigest()
+        if (
+            config.bundle_expected_sha256 is not None
+            and actual_hex.lower() != config.bundle_expected_sha256
+        ):
+            raise DataUnavailableError("Downloaded artifact differs from declared bundle SHA-256.")
         if actual_hex.lower() != expected_hex.lower():
             raise DataUnavailableError(
                 f"SHA-256 mismatch: expected {expected_hex}, got {actual_hex}."

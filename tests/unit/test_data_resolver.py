@@ -182,6 +182,30 @@ def test_fetch_prebuilt_sha256_mismatch_raises(config: OrphanetDataConfig, tmp_p
 
 
 @respx.mock
+def test_fetch_prebuilt_rejects_a_bundle_that_differs_from_the_declared_pin(
+    config: OrphanetDataConfig, tmp_path: Path
+) -> None:
+    """An init sidecar must verify the manifest's immutable artifact hash too."""
+    tiny_db = _make_tiny_db(tmp_path)
+    gz_bytes, sha_hex = _gz_and_sha(tiny_db)
+    config = OrphanetDataConfig(
+        data_dir=config.data_dir,
+        release_repo=config.release_repo,
+        release_tag=config.release_tag,
+        bundle_expected_sha256="a" * 64,
+    )
+
+    respx.get(_GH_LATEST).mock(
+        return_value=httpx.Response(200, json=_release_json(_GZ_URL, _SHA_URL))
+    )
+    respx.get(_GZ_URL).mock(return_value=httpx.Response(200, content=gz_bytes))
+    respx.get(_SHA_URL).mock(return_value=httpx.Response(200, content=sha_hex.encode()))
+
+    with pytest.raises(DataUnavailableError, match="declared bundle SHA-256"):
+        fetch_prebuilt(config)
+
+
+@respx.mock
 def test_fetch_prebuilt_rejects_unapproved_asset_redirect(
     config: OrphanetDataConfig,
 ) -> None:
