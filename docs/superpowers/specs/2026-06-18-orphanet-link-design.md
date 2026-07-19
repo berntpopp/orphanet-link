@@ -2,6 +2,10 @@
 
 **Date:** 2026-06-18
 **Status:** Approved design, pre-implementation
+
+> Historical record — this specification records the approved design as of its date. Current
+> behavior is defined by implemented code, standards, release evidence, and tests.
+
 **Author:** drafted with Claude (MCP fleet engineering)
 
 ## 1. Purpose & summary
