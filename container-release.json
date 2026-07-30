@@ -35,6 +35,7 @@
       "opt/venv/lib/python3.14/site-packages/orphanet_link/data/repository.py"
     ]
   },
+  "data_identity_contract": "unadopted",
   "definitions": {
     "contract": "data-bound"
   },
