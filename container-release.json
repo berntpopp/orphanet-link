@@ -31,8 +31,8 @@
     "image_allowlist": [
       "home/app/web/orphanet_link/data/__init__.py",
       "home/app/web/orphanet_link/data/repository.py",
-      "opt/venv/lib/python3.12/site-packages/orphanet_link/data/__init__.py",
-      "opt/venv/lib/python3.12/site-packages/orphanet_link/data/repository.py"
+      "opt/venv/lib/python3.14/site-packages/orphanet_link/data/__init__.py",
+      "opt/venv/lib/python3.14/site-packages/orphanet_link/data/repository.py"
     ]
   },
   "definitions": {

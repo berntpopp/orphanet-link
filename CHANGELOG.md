@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-30
+
+Python 3.12 → **3.14** for the shipped container and for the interpreter CI executes.
+No runtime behaviour change.
+
+### Changed
+
+- **`docker/Dockerfile` base `python:3.12-slim` → `python:3.14-slim`** (digest
+  `cea0e604`, Debian 13.6, CPython 3.14.6) in both the `builder` and `prepared` stages.
+  This closes the deferral recorded in 0.4.1. Landed as a migration rather than the bare
+  base bump Dependabot proposed (#44, RED), because a bare bump breaks the two things
+  below.
+- **`container-release.json` `image_allowlist` repointed to `python3.14`.** The two
+  `opt/venv/lib/python3.12/site-packages/orphanet_link/data/*` entries are interpreter-
+  versioned paths that the router's `_container-ci.yml` feeds to the OCI content
+  inspector; after a base bump they name files that no longer exist in the image. All
+  four allowlisted paths were verified against the actually-built `production` image,
+  whose `/opt/venv/lib` now contains only `python3.14`.
+- **CI now executes on the interpreter the image ships**: `ci.yml`'s `python-version`
+  and the `.github/actions/setup-uv-python` composite default both move `3.12` → `3.14`.
+  This is the substantive half of the migration — a base bump alone would have shipped a
+  3.14 runtime that no gate had ever run. `uv sync --frozen` resolves cleanly on 3.14
+  from the existing lock; `make ci-local` (mypy --strict included) and `make test-cov`
+  are green there.
+
+### Not changed, deliberately
+
+- **`requires-python` stays `>=3.12`**, and with it ruff's `target-version = "py312"`
+  and mypy's `python_version = "3.12"`. Moving the floor to `>=3.14` makes
+  **Container CI fail**, and the failure is not fixable from this repo: the pinned
+  reusable workflow (`berntpopp/genefoundry-router/.github/workflows/_container-ci.yml`
+  @`86b11f7e`) sets up **only Python 3.12** and then runs `uv lock --check` in the caller
+  repo. `uv lock --check` (uv 0.8.7) refuses to download an interpreter, so it aborts
+  with `No interpreter found for Python >=3.14 in managed installations or search path`.
+  Picking up a fix would require re-pinning that workflow, which is out of scope here.
+  The floor is a packaging lower bound, not a claim about the tested runtime; the tested
+  runtime is 3.14 and matches the image. Move the floor (and the ruff/mypy targets, which
+  then pull in PEP 758 `except` formatting and `UP043`) once the container standard
+  provisions an interpreter satisfying the caller's `requires-python`.
+- The README **badge** stays at "Python 3.12+" regardless: that line is a canonical
+  string hardcoded in the fleet-vendored `scripts/check_readme.py` (README Standard v1),
+  so it can only move fleet-wide from genefoundry-router's copy.
+
 ## [0.4.1] - 2026-07-30
 
 Consolidated Dependabot sweep. No runtime behaviour change.
