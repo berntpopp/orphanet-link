@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-30
+
+Consolidated Dependabot sweep. No runtime behaviour change.
+
+### Fixed
+
+- **`.github/dependabot.yml` watched only `github-actions`.** This repo's Python (uv)
+  dependencies, its Docker base image, and its Compose stack had therefore never been
+  scanned — which is why every Dependabot PR raised here to date was an Actions bump and
+  the lock had drifted unattended. The config now follows the fleet-standard four
+  ecosystems (`uv` at `/`, `github-actions` at `/`, `docker` and `docker-compose` at
+  `/docker`) on staggered Monday Europe/Berlin schedules.
+- **Two CodeQL `py/incomplete-url-substring-sanitization` alerts (high)** in
+  `tests/unit/test_parser_product1.py`. Both were URL assertions written as
+  `startswith` on a host fragment — `startswith("http://www.orpha.net")` also matches
+  `http://www.orpha.net.evil.example/…`. Both now assert the full URL with `==`, which
+  additionally proves the parser round-trips the whole attribute verbatim (XML entities
+  decoded) rather than merely its prefix.
+- **`.github/actions/setup-uv-python` had drifted three majors behind the workflows**
+  (`astral-sh/setup-uv` v6.8.0 vs v8.3.2), because Dependabot was not raising PRs against
+  the composite action. It is now on v9.0.0 with the exact tag named in its pin comment.
+
+### Changed
+
+- Swept the never-watched uv lock (`uv lock --upgrade`, 30 packages): `fastapi`
+  0.137.2 → 0.141.1, `fastmcp` 3.4.4 → 3.4.5, `mcp` 1.28.1 → 1.29.0, `uvicorn`
+  0.49.0 → 0.52.0, `typer` 0.26.7 → 0.27.0, `mypy` 2.1.0 → 2.3.0, `pytest`
+  9.1.0 → 9.1.1, `ruff` 0.15.18 → 0.16.0, `certifi` 2026.6.17 → 2026.7.22,
+  `websockets` 16.0 → 17.0. `pyproject` floors are minimum-supported bounds here, not
+  lock pins, and every upgrade stays inside its declared upper cap.
+- `[tool.ruff.lint]` now uses `select` instead of `extend-select` with an identical rule
+  list. ruff 0.16.0 grew its implicit default rule set from 59 to 413 rules, so
+  `extend-select` would have silently enabled ~350 rules this repo never opted into. The
+  declared list already supersets ruff's pre-0.16 default (E4/E7/E9 + F), so the enforced
+  lint policy is byte-identical — adopting further rule families stays a deliberate
+  decision rather than a side effect of a dependency bump.
+- Pinned actions: `actions/checkout` 7.0.0 → 7.0.1, `astral-sh/setup-uv` 8.3.2 → 9.0.0,
+  `actions/setup-python` 6.3.0 → 7.0.0. Every SHA was verified against the upstream tag
+  its comment claims.
+- `docker/Dockerfile` base image `python:3.12-slim` digest `423ed6ab` → `57cd7c3a`
+  (current `3.12-slim`), picking up the base-OS patches. The tag stays on 3.12: the
+  package targets `>=3.12`, CI tests 3.12, and `container-release.json`'s
+  `image_allowlist` encodes `python3.12` site-packages paths, so a 3.14 move is a
+  deliberate migration rather than a dependency bump.
+- `CITATION.cff` regenerated (was stale at 0.3.7).
+
 ## [0.4.0] - 2026-07-14
 
 MCP contract hardening ([#28]). The fleet behaviour gate went from **42 failures and 2

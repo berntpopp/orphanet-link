@@ -19,7 +19,10 @@ def test_product1_parses_disorder():
     assert d["disorder_group"] == "Disorder"
     assert d["disorder_flag"] == "1"
     assert d["definition"].startswith("A rare primary bone dysplasia")
-    assert d["expert_link"].startswith("http://www.orpha.net")
+    # Exact match, not a prefix check: a `startswith` on a URL is the
+    # py/incomplete-url-substring-sanitization pattern, and the parser must
+    # round-trip the whole attribute verbatim (XML entities decoded) anyway.
+    assert d["expert_link"] == "http://www.orpha.net/consor/cgi-bin/OC_Exp.php?lng=en&Expert=166024"
     alex = by_code["58"]
     assert alex["synonyms"] == ["AxD", "Fibrinoid leukodystrophy"]
 
@@ -42,7 +45,8 @@ def test_product1_parses_xrefs():
         icd11["icd_relation"]
         == "Index term (ICD-10: Orphanet entity listed in the ICD-10 Index. ICD-11: Orphanet entity listed in the ICD-11 Foundation)"
     )  # full ICD relation name
-    assert icd11["ref_uri"].startswith("https://icd.who.int")
+    # Exact match, not a prefix check (see the note in test_product1_parses_disorder).
+    assert icd11["ref_uri"] == "https://icd.who.int/browse/latest-release/mms/en#2009123831"
 
 
 def test_jdbor_stamp():
