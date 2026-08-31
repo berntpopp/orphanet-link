@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
@@ -70,7 +70,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ORPHANET_LINK_DATA__REFRESH_ENABLED=false \
     TMPDIR=/tmp
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -98,6 +98,8 @@ RUN rm -rf /root/.cache/pip \
            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.* \
            /opt/venv/lib/python*/site-packages/pip \
            /opt/venv/lib/python*/site-packages/pip-*.dist-info \
+           /opt/venv/lib/python*/site-packages/setuptools \
+           /opt/venv/lib/python*/site-packages/setuptools-*.dist-info \
            /opt/venv/bin/pip /opt/venv/bin/pip3 /opt/venv/bin/pip3.* \
     && find / -xdev -type d -name __pycache__ -prune -exec rm -rf '{}' + \
     && find / -xdev -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
