@@ -157,7 +157,15 @@ jobs:
           PY
               )"
               case "$state" in
-                published_noop|draft_publish_existing)
+                published_noop)
+                  # A no-op is still an accepted release: require a valid
+                  # provenance attestation before recording the state.
+                  timeout 120s gh attestation verify "$existing_dir/orphanet.sqlite.gz" \
+                    --repo "$GITHUB_REPOSITORY"
+                  echo "state=$state" >> "$GITHUB_OUTPUT"
+                  echo "Release $TAG has identical verified assets: $state."
+                  ;;
+                draft_publish_existing)
                   echo "state=$state" >> "$GITHUB_OUTPUT"
                   echo "Release $TAG has identical verified assets: $state."
                   ;;

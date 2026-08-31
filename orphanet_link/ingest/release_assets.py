@@ -72,23 +72,40 @@ def _release_assets(value: object) -> tuple[bool, tuple[Mapping[str, object], ..
     if not isinstance(assets, list):
         raise ReleaseAssetError("release metadata has an invalid asset inventory")
     by_name: dict[str, Mapping[str, object]] = {}
+    asset_ids: set[int] = set()
     for asset in assets:
-        if not isinstance(asset, dict) or type(asset.get("name")) is not str:
+        if (
+            not isinstance(asset, dict)
+            or type(asset.get("name")) is not str
+            or type(asset.get("id")) is not int
+            or asset["id"] <= 0
+            or asset["id"] in asset_ids
+        ):
             raise ReleaseAssetError("release metadata has an invalid asset inventory")
         name = asset["name"]
         if name in by_name:
             raise ReleaseAssetError("release metadata has a duplicate asset")
         by_name[name] = asset
+        asset_ids.add(asset["id"])
     if set(by_name) != RELEASE_ASSETS:
         raise ReleaseAssetError("release metadata has an inexact asset inventory")
     return value["draft"], tuple(by_name[name] for name in sorted(RELEASE_ASSETS))
 
 
-def _asset_facts(asset: Mapping[str, object]) -> tuple[str, int, str]:
+def _asset_facts(asset: Mapping[str, object], repo: str) -> tuple[str, int, str]:
+    identifier = asset.get("id")
     url = asset.get("url")
     size = asset.get("size")
     digest = asset.get("digest")
-    if type(url) is not str or type(size) is not int or not isinstance(digest, str):
+    expected_url = f"https://{_API_HOST}/repos/{repo}/releases/assets/{identifier}"
+    if type(url) is not str or url != expected_url:
+        raise ReleaseAssetError("release asset URL is not bound to its API asset ID")
+    if (
+        type(identifier) is not int
+        or identifier <= 0
+        or type(size) is not int
+        or not isinstance(digest, str)
+    ):
         raise ReleaseAssetError("release metadata has an invalid asset")
     match = _DIGEST.fullmatch(digest)
     if (
@@ -153,7 +170,7 @@ def fetch_existing_release(
             for asset in assets:
                 name = asset["name"]
                 assert isinstance(name, str)
-                url, size, expected_digest = _asset_facts(asset)
+                url, size, expected_digest = _asset_facts(asset, repo)
                 max_bytes = MAX_ASSET_BYTES if name == ASSET_NAME else MAX_METADATA_BYTES
                 policy = DownloadPolicy(
                     allowed_hosts=_ASSET_HOSTS,

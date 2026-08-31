@@ -21,6 +21,7 @@ TEST_TOKEN = "test"  # noqa: S105 - controlled mock credential
 
 def _asset(name: str, content: bytes, identifier: int) -> dict[str, object]:
     return {
+        "id": identifier,
         "name": name,
         "size": len(content),
         "digest": f"sha256:{hashlib.sha256(content).hexdigest()}",
@@ -72,6 +73,63 @@ def test_rejects_non_404_release_api_status(tmp_path: Path) -> None:
         return httpx.Response(503, request=request)
 
     with pytest.raises(ReleaseAssetError, match="HTTP 503"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+@pytest.mark.parametrize("identifier", [None, 0, -1, True, "7"])
+def test_rejects_missing_or_invalid_asset_ids(tmp_path: Path, identifier: object) -> None:
+    assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
+    assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))
+    assets[0]["id"] = identifier
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="asset"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_rejects_duplicate_asset_ids(tmp_path: Path) -> None:
+    assets = [
+        _asset("manifest.json", b"{}", 1),
+        _asset("orphanet.sqlite.gz", b"gzip", 1),
+        _asset("orphanet.sqlite.gz.sha256", b"checksum", 3),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="asset"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_rejects_asset_url_not_bound_to_api_id(tmp_path: Path) -> None:
+    assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
+    assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))
+    assets[0]["url"] = f"https://release-assets.githubusercontent.com/assets/{assets[0]['id']}"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="URL"):
         fetch_existing_release(
             REPO,
             TAG,

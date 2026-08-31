@@ -69,6 +69,20 @@ def test_existing_release_retrieval_is_bounded_and_inventory_aware() -> None:
     assert "MAX_METADATA_BYTES" in (ROOT / "orphanet_link/ingest/release_assets.py").read_text()
 
 
+def test_published_noop_requires_provenance_before_state_output() -> None:
+    workflow = _workflow()
+    build_steps = workflow["jobs"]["build-and-verify"]["steps"]  # type: ignore[index]
+    step = next(
+        step for step in build_steps if step.get("name") == "Verify existing release identity"
+    )
+    script = step["run"]  # type: ignore[index]
+    assert "published_noop)" in script
+    verify = script.index("gh attestation verify")
+    state = script.index('echo "state=$state"', verify)
+    assert verify < state
+    assert "timeout 120s" in script
+
+
 def test_build_and_publisher_permissions_are_separated() -> None:
     workflow = _workflow()
     assert workflow["permissions"] == {}
