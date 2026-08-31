@@ -25,6 +25,8 @@ from orphanet_link.ingest.release_identity import (
     MAX_ASSET_BYTES,
     MAX_METADATA_BYTES,
     RELEASE_ASSETS,
+    ReleaseIdentityError,
+    validate_release_id,
 )
 
 _API_HOST = "api.github.com"
@@ -44,6 +46,10 @@ class ExistingRelease:
     """Authenticated state returned after fetching the exact remote asset set."""
 
     is_draft: bool
+    release_id: int
+    tag_name: str
+    target_commitish: str
+    immutable: bool
 
 
 def _read_bounded(response: httpx.Response, *, max_bytes: int, max_seconds: float) -> bytes:
@@ -65,31 +71,54 @@ def _read_bounded(response: httpx.Response, *, max_bytes: int, max_seconds: floa
     return bytes(body)
 
 
-def _release_assets(value: object) -> tuple[bool, tuple[Mapping[str, object], ...]]:
-    if not isinstance(value, dict) or type(value.get("draft")) is not bool:
-        raise ReleaseAssetError("release metadata has an invalid shape")
+def _release_assets(
+    value: object, repo: str, tag: str
+) -> tuple[int, str, str, bool, bool, tuple[Mapping[str, object], ...]]:
+    if (
+        not isinstance(value, dict)
+        or type(value.get("tag_name")) is not str
+        or value["tag_name"] != tag
+        or type(value.get("target_commitish")) is not str
+        or not value["target_commitish"]
+        or type(value.get("draft")) is not bool
+        or type(value.get("immutable")) is not bool
+    ):
+        raise ReleaseAssetError("release metadata has an invalid tag or source identity")
+    try:
+        release_id = validate_release_id(value.get("id"))
+    except ReleaseIdentityError as error:
+        raise ReleaseAssetError(str(error)) from error
+    if value["draft"] is False and value["immutable"] is not True:
+        raise ReleaseAssetError("published release is not immutable")
     assets = value.get("assets")
     if not isinstance(assets, list):
         raise ReleaseAssetError("release metadata has an invalid asset inventory")
     by_name: dict[str, Mapping[str, object]] = {}
     asset_ids: set[int] = set()
     for asset in assets:
-        if (
-            not isinstance(asset, dict)
-            or type(asset.get("name")) is not str
-            or type(asset.get("id")) is not int
-            or asset["id"] <= 0
-            or asset["id"] in asset_ids
-        ):
+        if not isinstance(asset, dict) or type(asset.get("name")) is not str:
+            raise ReleaseAssetError("release metadata has an invalid asset inventory")
+        try:
+            asset_id = validate_release_id(asset.get("id"))
+        except ReleaseIdentityError as error:
+            raise ReleaseAssetError("release asset ID is outside the safe bound") from error
+        if asset_id in asset_ids:
             raise ReleaseAssetError("release metadata has an invalid asset inventory")
         name = asset["name"]
         if name in by_name:
             raise ReleaseAssetError("release metadata has a duplicate asset")
         by_name[name] = asset
-        asset_ids.add(asset["id"])
+        asset_ids.add(asset_id)
     if set(by_name) != RELEASE_ASSETS:
         raise ReleaseAssetError("release metadata has an inexact asset inventory")
-    return value["draft"], tuple(by_name[name] for name in sorted(RELEASE_ASSETS))
+    return (
+        release_id,
+        value["tag_name"],
+        value["target_commitish"],
+        value["draft"],
+        value["immutable"],
+        tuple(by_name[name] for name in sorted(RELEASE_ASSETS)),
+    )
 
 
 def _asset_facts(asset: Mapping[str, object], repo: str) -> tuple[str, int, str]:
@@ -97,15 +126,14 @@ def _asset_facts(asset: Mapping[str, object], repo: str) -> tuple[str, int, str]
     url = asset.get("url")
     size = asset.get("size")
     digest = asset.get("digest")
+    try:
+        validate_release_id(identifier)
+    except ReleaseIdentityError as error:
+        raise ReleaseAssetError(str(error)) from error
     expected_url = f"https://{_API_HOST}/repos/{repo}/releases/assets/{identifier}"
     if type(url) is not str or url != expected_url:
         raise ReleaseAssetError("release asset URL is not bound to its API asset ID")
-    if (
-        type(identifier) is not int
-        or identifier <= 0
-        or type(size) is not int
-        or not isinstance(digest, str)
-    ):
+    if type(size) is not int or not isinstance(digest, str):
         raise ReleaseAssetError("release metadata has an invalid asset")
     match = _DIGEST.fullmatch(digest)
     if (
@@ -130,6 +158,7 @@ def _find_authenticated_draft(
     *,
     headers: Mapping[str, str],
     policy: DownloadPolicy,
+    expected_release_id: int | None = None,
 ) -> Mapping[str, object] | None:
     """Find one exact draft hidden from GitHub's release-by-tag endpoint."""
     matches: list[Mapping[str, object]] = []
@@ -154,10 +183,18 @@ def _find_authenticated_draft(
             if not isinstance(item, dict) or type(item.get("tag_name")) is not str:
                 raise ReleaseAssetError("release inventory has an invalid shape")
             if item["tag_name"] == tag:
-                if type(item.get("id")) is not int or item["id"] <= 0:
-                    raise ReleaseAssetError("release inventory has an invalid release ID")
+                try:
+                    item_id = validate_release_id(item.get("id"))
+                except ReleaseIdentityError as error:
+                    raise ReleaseAssetError(str(error)) from error
                 if item.get("draft") is not True:
-                    raise ReleaseAssetError("release-by-tag lookup omitted a non-draft release")
+                    if expected_release_id != item_id:
+                        raise ReleaseAssetError("release inventory contains a duplicate exact tag")
+                    continue
+                if expected_release_id is not None or item_id in {
+                    match.get("id") for match in matches
+                }:
+                    raise ReleaseAssetError("release inventory contains duplicate matching drafts")
                 matches.append(item)
         if len(matches) > 1:
             raise ReleaseAssetError("release inventory contains duplicate matching drafts")
@@ -214,7 +251,9 @@ def fetch_existing_release(
                         )
                     except (UnicodeDecodeError, json.JSONDecodeError) as error:
                         raise ReleaseAssetError("release metadata is invalid JSON") from error
-            is_draft, assets = _release_assets(parsed)
+            release_id, tag_name, target_commitish, is_draft, immutable, assets = _release_assets(
+                parsed, repo, tag
+            )
             if destination.exists():
                 raise ReleaseAssetError("release destination already exists")
             destination.mkdir(mode=0o700)
@@ -249,6 +288,15 @@ def fetch_existing_release(
                         raise ReleaseAssetError(
                             f"release asset {name} digest does not match metadata"
                         )
+            if not is_draft:
+                _find_authenticated_draft(
+                    client,
+                    repo,
+                    tag,
+                    headers=headers,
+                    policy=metadata_policy,
+                    expected_release_id=release_id,
+                )
     except DownloadError as error:
         raise ReleaseAssetError(str(error)) from error
     except httpx.HTTPError as error:
@@ -257,7 +305,13 @@ def fetch_existing_release(
         if isinstance(error, ReleaseAssetError):
             raise
         raise ReleaseAssetError("release retrieval failed") from error
-    return ExistingRelease(is_draft=is_draft)
+    return ExistingRelease(
+        is_draft=is_draft,
+        release_id=release_id,
+        tag_name=tag_name,
+        target_commitish=target_commitish,
+        immutable=immutable,
+    )
 
 
 def main() -> int:
@@ -270,7 +324,20 @@ def main() -> int:
     result = fetch_existing_release(
         args.repo, args.tag, args.destination, token=os.environ.get("GH_TOKEN", "")
     )
-    print("absent" if result is None else "draft" if result.is_draft else "published")  # noqa: T201
+    print(  # noqa: T201
+        json.dumps(
+            {"state": "absent"}
+            if result is None
+            else {
+                "state": "draft" if result.is_draft else "published",
+                "release_id": result.release_id,
+                "tag_name": result.tag_name,
+                "target_commitish": result.target_commitish,
+                "immutable": result.immutable,
+            },
+            separators=(",", ":"),
+        )
+    )
     return 0
 
 

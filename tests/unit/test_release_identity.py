@@ -11,6 +11,7 @@ import pytest
 from orphanet_link.ingest.release_identity import (
     ReleaseIdentityError,
     classify_release,
+    publication_tag,
     read_release_identity,
     release_tag,
 )
@@ -42,6 +43,19 @@ def test_release_tag_binds_the_dataset_revision() -> None:
                 "2025-12-09 07:06:32",
                 collision_revision=invalid_revision,
             )
+
+
+def test_collision_revision_is_only_for_the_audited_source_tuple() -> None:
+    version = "1.3.42 / 4.1.8 [2025-03-03]"
+    audited_date = "2025-12-09 07:06:32"
+    future_version = "1.3.43 / 4.1.9 [2026-01-01]"
+
+    assert publication_tag(version, audited_date).endswith("-r2")
+    assert publication_tag(future_version, audited_date) == release_tag(
+        future_version, audited_date
+    )
+    with pytest.raises(ReleaseIdentityError, match="audited source"):
+        release_tag(future_version, audited_date, collision_revision=2)
 
 
 def test_tag_only_existing_release_cannot_be_skipped(tmp_path: Path) -> None:

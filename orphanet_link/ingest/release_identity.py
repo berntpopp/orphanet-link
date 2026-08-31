@@ -13,10 +13,13 @@ from typing import Literal, cast
 
 MAX_METADATA_BYTES = 1 << 20
 MAX_ASSET_BYTES = 4 * 1024**3
+MAX_RELEASE_ID = (1 << 63) - 1
 ASSET_NAME = "orphanet.sqlite.gz"
 CHECKSUM_NAME = f"{ASSET_NAME}.sha256"
 RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, "manifest.json"})
 _VERSION_TAG = re.compile(r"^data-[0-9A-Za-z][0-9A-Za-z.-]*$")
+_AUDITED_VERSION = "1.3.42 / 4.1.8 [2025-03-03]"
+_AUDITED_ORPHANET_DATE = "2025-12-09 07:06:32"
 _COUNT_FIELDS = (
     "disorder_count",
     "xref_count",
@@ -34,6 +37,13 @@ ReleaseState = Literal["create", "published_noop", "draft_publish_existing", "co
 
 class ReleaseIdentityError(ValueError):
     """A release cannot be treated as an exact immutable identity."""
+
+
+def validate_release_id(value: object) -> int:
+    """Return a GitHub ID within the bounded signed-64-bit API range."""
+    if type(value) is not int or not 0 < value <= MAX_RELEASE_ID:
+        raise ReleaseIdentityError("release ID is outside the safe bound")
+    return value
 
 
 @dataclass(frozen=True)
@@ -181,9 +191,19 @@ def release_tag(
     tag = f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
     if collision_revision is None:
         return tag
+    if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        raise ReleaseIdentityError("collision revision is only supported for the audited source")
     if type(collision_revision) is not int or collision_revision < 2:
         raise ReleaseIdentityError("collision revision must be an integer of at least 2")
     return f"{tag}-r{collision_revision}"
+
+
+def publication_tag(version: str, orphanet_date: str) -> str:
+    """Select the audited collision tag only for the known historical dataset."""
+    base = release_tag(version, orphanet_date)
+    if (version, orphanet_date) == (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        return release_tag(version, orphanet_date, collision_revision=2)
+    return base
 
 
 def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
@@ -191,6 +211,8 @@ def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
     base = release_tag(version, orphanet_date)
     if tag == base:
         return True
+    if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        return False
     suffix = tag.removeprefix(f"{base}-r")
     return (
         tag.startswith(f"{base}-r") and re.fullmatch(r"(?:[2-9]|[1-9][0-9]+)", suffix) is not None

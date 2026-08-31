@@ -43,9 +43,9 @@ def test_existing_release_downloads_exact_assets_and_compares_identity() -> None
 
 def test_release_tag_is_qualified_by_the_exact_dataset_revision() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
-    assert "release_tag" in workflow_text
+    assert "publication_tag" in workflow_text
     assert "orphanet_date" in workflow_text
-    assert "collision_revision=2" in workflow_text
+    assert "collision_revision=2" in (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
     assert 'TAG="data-$SLUG"' not in workflow_text
 
 
@@ -164,6 +164,25 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert script.index('"repos/$GITHUB_REPOSITORY/releases/$release_id"', patch) > patch
     assert "git/ref/tags/$TAG" in script
     assert "orphanet-release-assets" in str(publish_steps)
+
+
+def test_published_noop_rechecks_release_identity_and_source_tag() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    build = workflow_text[
+        workflow_text.index("Verify existing release identity") : workflow_text.index(
+            "# 5. Transfer"
+        )
+    ]
+    assert "immutable" in build
+    assert "target_commitish" in build
+    assert "git/ref/tags/$TAG" in build
+    assert "releases/$release_id" in build
+
+
+def test_writer_bounds_ids_and_times_out_create() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "2**63 - 1" in workflow_text
+    assert "timeout 120s gh release create" in workflow_text
 
 
 def test_publisher_is_trusted_and_can_generate_provenance() -> None:
