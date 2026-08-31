@@ -20,6 +20,8 @@ FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "releases" / "orphanet_data_1.3.42.json"
 )
 TAG = "data-1.3.42-4.1.8-2025-03-03-r20251209T070632Z"
+COLLISION_DATE = "2026-06-23 07:53:50"
+COLLISION_TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z"
 
 
 def _fixture() -> dict[str, object]:
@@ -30,8 +32,8 @@ def test_release_tag_binds_the_dataset_revision() -> None:
     version = "1.3.42 / 4.1.8 [2025-03-03]"
 
     assert release_tag(version, "2025-12-09 07:06:32") == TAG
-    assert release_tag(version, "2026-06-23 07:53:50").endswith("-r20260623T075350Z")
-    assert release_tag(version, "2025-12-09 07:06:32", collision_revision=2) == f"{TAG}-r2"
+    assert release_tag(version, COLLISION_DATE) == COLLISION_TAG
+    assert release_tag(version, COLLISION_DATE, collision_revision=2) == f"{COLLISION_TAG}-r2"
 
     with pytest.raises(ReleaseIdentityError, match="orphanet_date"):
         release_tag(version, "2026-06-23")
@@ -40,22 +42,26 @@ def test_release_tag_binds_the_dataset_revision() -> None:
         with pytest.raises(ReleaseIdentityError, match="collision revision"):
             release_tag(  # type: ignore[arg-type]
                 version,
-                "2025-12-09 07:06:32",
+                COLLISION_DATE,
                 collision_revision=invalid_revision,
             )
 
 
 def test_collision_revision_is_only_for_the_audited_source_tuple() -> None:
     version = "1.3.42 / 4.1.8 [2025-03-03]"
-    audited_date = "2025-12-09 07:06:32"
+    audited_date = COLLISION_DATE
+    prior_date = "2025-12-09 07:06:32"
     future_version = "1.3.43 / 4.1.9 [2026-01-01]"
 
     assert publication_tag(version, audited_date).endswith("-r2")
+    assert publication_tag(version, prior_date) == release_tag(version, prior_date)
     assert publication_tag(future_version, audited_date) == release_tag(
         future_version, audited_date
     )
     with pytest.raises(ReleaseIdentityError, match="audited source"):
         release_tag(future_version, audited_date, collision_revision=2)
+    with pytest.raises(ReleaseIdentityError, match="audited source"):
+        release_tag(version, prior_date, collision_revision=2)
     with pytest.raises(ReleaseIdentityError, match="exactly revision 2"):
         release_tag(version, audited_date, collision_revision=3)
 
@@ -107,7 +113,9 @@ def test_read_release_identity_requires_exact_assets_and_bounded_metadata(tmp_pa
         read_release_identity(tmp_path, TAG)
 
 
-def _write_release(path: Path, *, schema_version: int = 1) -> None:
+def _write_release(
+    path: Path, *, schema_version: int = 1, orphanet_date: str = "2025-12-09 07:06:32"
+) -> None:
     path.mkdir()
     asset = b"bounded test sqlite gzip bytes"
     digest = hashlib.sha256(asset).hexdigest()
@@ -117,7 +125,7 @@ def _write_release(path: Path, *, schema_version: int = 1) -> None:
         json.dumps(
             {
                 "version": "1.3.42 / 4.1.8 [2025-03-03]",
-                "orphanet_date": "2025-12-09 07:06:32",
+                "orphanet_date": orphanet_date,
                 "schema_version": schema_version,
                 "disorder_count": 1,
                 "xref_count": 2,
@@ -134,17 +142,17 @@ def _write_release(path: Path, *, schema_version: int = 1) -> None:
 def test_directory_identity_verifies_assets_and_schema_before_classifying(tmp_path: Path) -> None:
     current = tmp_path / "current"
     existing = tmp_path / "existing"
-    _write_release(current)
-    _write_release(existing)
+    _write_release(current, orphanet_date=COLLISION_DATE)
+    _write_release(existing, orphanet_date=COLLISION_DATE)
 
-    assert read_release_identity(current, TAG).bundle_size == 30
-    assert read_release_identity(existing, TAG).schema_version == 1
-    assert read_release_identity(current, f"{TAG}-r2").tag == f"{TAG}-r2"
+    assert read_release_identity(current, COLLISION_TAG).bundle_size == 30
+    assert read_release_identity(existing, COLLISION_TAG).schema_version == 1
+    assert read_release_identity(current, f"{COLLISION_TAG}-r2").tag == f"{COLLISION_TAG}-r2"
 
     with pytest.raises(ReleaseIdentityError, match="manifest version"):
-        read_release_identity(current, f"{TAG}-r1")
+        read_release_identity(current, f"{COLLISION_TAG}-r1")
     with pytest.raises(ReleaseIdentityError, match="manifest version"):
-        read_release_identity(current, f"{TAG}-r3")
+        read_release_identity(current, f"{COLLISION_TAG}-r3")
 
     (existing / "manifest.json").write_text(
         (existing / "manifest.json")
@@ -153,7 +161,7 @@ def test_directory_identity_verifies_assets_and_schema_before_classifying(tmp_pa
     )
     from orphanet_link.ingest.release_identity import verify_release_identity
 
-    assert verify_release_identity(current, existing, TAG, is_draft=False) == "collision"
+    assert verify_release_identity(current, existing, COLLISION_TAG, is_draft=False) == "collision"
 
 
 def test_directory_identity_rejects_checksum_or_extra_asset(tmp_path: Path) -> None:
