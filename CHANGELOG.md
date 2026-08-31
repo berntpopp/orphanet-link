@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-08-31
+
+### Changed
+
+- Consolidate current runtime/tooling updates, use router container workflows at v0.8.3,
+  refresh the pinned Python base image, and make the production server restart persistent.
+- README validation now identifies the Git remote, so an isolated Git worktree validates
+  the repository badges correctly.
+- Upgrade Debian packages during the image build and remove bootstrap `setuptools` from the
+  production virtual environment to remediate fixable OpenSSL and packaging-tool findings.
+
 ## [0.4.3] - 2026-08-10
 
 ### Security
