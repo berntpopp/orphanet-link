@@ -180,6 +180,36 @@ def test_published_noop_rechecks_release_identity_and_source_tag() -> None:
     assert "releases/$release_id" in build
 
 
+def test_existing_correct_draft_may_defer_an_absent_source_tag_until_promotion() -> None:
+    """A draft created through the API can precede its Git tag ref."""
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    build = workflow_text[
+        workflow_text.index("Verify existing release identity") : workflow_text.index(
+            "# 5. Transfer"
+        )
+    ]
+    assert 'gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG"' in build
+    assert "source tag probe returned 404 for draft" in build
+    assert "published release requires an exact present source tag" in build
+
+
+def test_new_draft_absent_source_tag_is_created_after_final_verification() -> None:
+    """The writer owns the missing ref creation immediately before promotion."""
+    workflow = _workflow()
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    publish = next(
+        step for step in publish_steps if step.get("name") == "Publish exact rechecked draft"
+    )
+    script = publish["run"]
+    verify = script.index("verify_remote true")
+    ensure = script.index("ensure_source_tag()")
+    patch = script.index("gh api --method PATCH")
+    assert verify < ensure < patch
+    assert "git/refs" in script
+    assert '"ref=refs/tags/$TAG"' in script
+    assert "source tag creation response" in script
+
+
 def test_selected_draft_id_crosses_the_build_publisher_boundary() -> None:
     workflow = _workflow()
     build = workflow["jobs"]["build-and-verify"]  # type: ignore[index]

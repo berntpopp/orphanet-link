@@ -196,11 +196,34 @@ jobs:
               raise SystemExit("published release is not immutable")
           PY
               source_tag="$RUNNER_TEMP/orphanet-existing-source-tag.json"
-              timeout 30s gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+              set +e
+              timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+              tag_status=$?
+              set -e
               test "$(wc -c < "$source_tag")" -le 1048576
-              python3 - "$source_tag" "$GITHUB_SHA" <<'PY'
+              python3 - "$source_tag" "$GITHUB_SHA" "$remote_state" "$tag_status" <<'PY'
           import json, sys
-          target = json.load(open(sys.argv[1])).get("object")
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[4])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              if sys.argv[3] == "draft":
+                  print("source tag probe returned 404 for draft")
+                  raise SystemExit(0)
+              raise SystemExit("published release requires an exact present source tag")
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
           if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
               raise SystemExit("release tag does not resolve to the exact reviewed source")
           PY
@@ -414,11 +437,35 @@ jobs:
             remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
             release_json="${remote_dir}.json"
             source_tag="${remote_dir}.tag.json"
-            timeout 30s gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+            set +e
+            timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+            tag_status=$?
+            set -e
             test "$(wc -c < "$source_tag")" -le 1048576
-            python3 - "$source_tag" "$GITHUB_SHA" <<'PY'
-          import json, sys
-          target = json.load(open(sys.argv[1])).get("object")
+            python3 - "$source_tag" "$GITHUB_SHA" "$expected_draft" "$tag_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[4])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              if sys.argv[3] == "true":
+                  print("source tag is absent before promotion")
+                  raise SystemExit(0)
+              raise SystemExit("published release requires an exact present source tag")
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
           if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
               raise SystemExit("source tag does not resolve to the exact reviewed source")
           PY
@@ -511,6 +558,63 @@ jobs:
           # Recheck the exact numeric API identity and every byte immediately
           # before promotion, then promote and recheck that same identity.
           verify_remote true
+
+          ensure_source_tag() {
+            tag_probe="$RUNNER_TEMP/orphanet-promotion-tag-probe"
+            set +e
+            timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$tag_probe"
+            tag_status=$?
+            set -e
+            test "$(wc -c < "$tag_probe")" -le 1048576
+            tag_state="$(python3 - "$tag_probe" "$GITHUB_SHA" "$tag_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[3])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              print("absent")
+              raise SystemExit(0)
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("source tag does not resolve to the exact reviewed source")
+          print("present")
+          PY
+            )"
+            if [ "$tag_state" = "absent" ]; then
+              created_tag="$RUNNER_TEMP/orphanet-created-source-tag.json"
+              timeout 30s gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+                -f "ref=refs/tags/$TAG" \
+                -f "sha=$GITHUB_SHA" > "$created_tag"
+              test "$(wc -c < "$created_tag")" -le 1048576
+              python3 - "$created_tag" "$TAG" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1]))
+          if not isinstance(payload, dict):
+              raise SystemExit("source tag creation response is not an object")
+          if payload.get("ref") != f"refs/tags/{sys.argv[2]}":
+              raise SystemExit("source tag creation response has an unexpected ref")
+          target = payload.get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[3]:
+              raise SystemExit("source tag creation response is not the exact lightweight commit ref")
+          PY
+            fi
+          }
+          ensure_source_tag
           timeout 30s gh api --method PATCH \
             "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false \
             > "$RUNNER_TEMP/orphanet-promotion.json"
