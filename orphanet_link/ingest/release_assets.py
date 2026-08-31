@@ -123,6 +123,49 @@ def _metadata_url(repo: str, tag: str) -> str:
     return f"https://{_API_HOST}/repos/{repo}/releases/tags/{tag}"
 
 
+def _find_authenticated_draft(
+    client: httpx.Client,
+    repo: str,
+    tag: str,
+    *,
+    headers: Mapping[str, str],
+    policy: DownloadPolicy,
+) -> Mapping[str, object] | None:
+    """Find one exact draft hidden from GitHub's release-by-tag endpoint."""
+    matches: list[Mapping[str, object]] = []
+    for page in range(1, 11):
+        url = f"https://{_API_HOST}/repos/{repo}/releases?per_page=100&page={page}"
+        with open_validated_stream(client, url, headers=headers, policy=policy) as response:
+            if response.status_code != httpx.codes.OK:
+                raise ReleaseAssetError(
+                    f"release inventory API returned HTTP {response.status_code}"
+                )
+            try:
+                parsed = json.loads(
+                    _read_bounded(
+                        response, max_bytes=MAX_METADATA_BYTES, max_seconds=_METADATA_SECONDS
+                    ).decode("utf-8")
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ReleaseAssetError("release inventory is invalid JSON") from error
+        if not isinstance(parsed, list) or len(parsed) > 100:
+            raise ReleaseAssetError("release inventory has an invalid shape")
+        for item in parsed:
+            if not isinstance(item, dict) or type(item.get("tag_name")) is not str:
+                raise ReleaseAssetError("release inventory has an invalid shape")
+            if item["tag_name"] == tag:
+                if type(item.get("id")) is not int or item["id"] <= 0:
+                    raise ReleaseAssetError("release inventory has an invalid release ID")
+                if item.get("draft") is not True:
+                    raise ReleaseAssetError("release-by-tag lookup omitted a non-draft release")
+                matches.append(item)
+        if len(matches) > 1:
+            raise ReleaseAssetError("release inventory contains duplicate matching drafts")
+        if len(parsed) < 100:
+            return matches[0] if matches else None
+    raise ReleaseAssetError("release inventory exceeds the ten-page search bound")
+
+
 def fetch_existing_release(
     repo: str,
     tag: str,
@@ -152,17 +195,25 @@ def fetch_existing_release(
                 client, _metadata_url(repo, tag), headers=headers, policy=metadata_policy
             ) as response:
                 if response.status_code == httpx.codes.NOT_FOUND:
-                    return None
-                if response.status_code != httpx.codes.OK:
-                    raise ReleaseAssetError(f"release API returned HTTP {response.status_code}")
-                try:
-                    parsed = json.loads(
-                        _read_bounded(
-                            response, max_bytes=MAX_METADATA_BYTES, max_seconds=_METADATA_SECONDS
-                        ).decode("utf-8")
+                    parsed = _find_authenticated_draft(
+                        client, repo, tag, headers=headers, policy=metadata_policy
                     )
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    raise ReleaseAssetError("release metadata is invalid JSON") from error
+                    if parsed is None:
+                        return None
+                if response.status_code != httpx.codes.OK:
+                    if response.status_code != httpx.codes.NOT_FOUND:
+                        raise ReleaseAssetError(f"release API returned HTTP {response.status_code}")
+                else:
+                    try:
+                        parsed = json.loads(
+                            _read_bounded(
+                                response,
+                                max_bytes=MAX_METADATA_BYTES,
+                                max_seconds=_METADATA_SECONDS,
+                            ).decode("utf-8")
+                        )
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise ReleaseAssetError("release metadata is invalid JSON") from error
             is_draft, assets = _release_assets(parsed)
             if destination.exists():
                 raise ReleaseAssetError("release destination already exists")

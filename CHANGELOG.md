@@ -91,6 +91,8 @@ Consolidated Dependabot sweep. No runtime behaviour change.
   verification.
 - Correct the immutable `actions/attest-build-provenance` v2.2.0 pin used by the protected data
   publisher so the attestation action resolves before draft creation.
+- Discover authenticated drafts through a bounded release inventory and recheck them by exact
+  numeric release ID, because GitHub's release-by-tag REST endpoint hides unpublished drafts.
 
 - **`.github/dependabot.yml` watched only `github-actions`.** This repo's Python (uv)
   dependencies, its Docker base image, and its Compose stack had therefore never been
