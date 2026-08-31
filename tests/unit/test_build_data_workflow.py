@@ -59,7 +59,7 @@ def test_identity_states_gate_mutation_without_delete_or_clobber() -> None:
     assert "gh release delete" not in workflow_text
     assert "--clobber" not in workflow_text
     assert any(
-        step.get("if") == "steps.release_state.outputs.state == 'create'"
+        step.get("if") == "needs.build-and-verify.outputs.state == 'create'"
         for step in _steps(_workflow())
     )
 
@@ -84,3 +84,20 @@ def test_create_is_atomic_and_does_not_use_an_overwriting_action() -> None:
     assert "softprops/action-gh-release" not in workflow_text
     assert "gh release create" in workflow_text
     assert "--clobber" not in workflow_text
+
+
+def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish() -> None:
+    """The build-job check cannot authorize a mutable draft minutes later."""
+    workflow = _workflow()
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    names = [step.get("name", "") for step in publish_steps]  # type: ignore[union-attr]
+    recheck = names.index("Recheck exact draft identity before publication")
+    create_draft = names.index("Atomically create a new draft")
+    publish = names.index("Publish exact rechecked draft")
+    assert create_draft < recheck < publish
+    script = publish_steps[recheck]["run"]  # type: ignore[index]
+    assert "orphanet_link.ingest.release_assets" in script
+    assert "verify_release_identity" in script
+    assert "read_release_identity" in script
+    assert "draft_publish_existing" in script
+    assert "orphanet-release-assets" in str(publish_steps)

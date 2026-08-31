@@ -175,13 +175,13 @@ jobs:
           esac
 
       # -----------------------------------------------------------------------
-      # 5. Transfer only a verified new package to the privileged publisher
+      # 5. Transfer the exact verified handoff; the writer independently rechecks it.
       # -----------------------------------------------------------------------
-      - name: Upload verified create package
-        if: steps.release_state.outputs.state == 'create'
+      - name: Upload verified release package
+        if: steps.release_state.outputs.state == 'create' || steps.release_state.outputs.state == 'draft_publish_existing'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: orphanet-create-assets
+          name: orphanet-release-assets
           path: ${{ runner.temp }}/orphanet-current-release
           if-no-files-found: error
 
@@ -194,21 +194,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download verified create package
-        if: needs.build-and-verify.outputs.state == 'create'
+      - name: Download exact verified release package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: orphanet-create-assets
+          name: orphanet-release-assets
           path: release-assets
 
-      - name: Publish an existing verified draft
-        if: needs.build-and-verify.outputs.state == 'draft_publish_existing'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.build-and-verify.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
-
-      - name: Atomically create and publish a new release
+      - name: Atomically create a new draft
         if: needs.build-and-verify.outputs.state == 'create'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -225,4 +217,38 @@ jobs:
             release-assets/orphanet.sqlite.gz \
             release-assets/orphanet.sqlite.gz.sha256 \
             release-assets/manifest.json
-          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+      - name: Recheck exact draft identity before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-and-verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          remote_dir="$RUNNER_TEMP/orphanet-publisher-recheck"
+          state="$(uv run python -m orphanet_link.ingest.release_assets \
+            "$GITHUB_REPOSITORY" "$TAG" "$remote_dir")"
+          test "$state" = draft
+          verification="$(uv run python - release-assets "$remote_dir" "$TAG" <<'PY'
+          import sys
+          from pathlib import Path
+
+          from orphanet_link.ingest.release_identity import (
+              read_release_identity,
+              verify_release_identity,
+          )
+
+          expected = read_release_identity(Path(sys.argv[1]), sys.argv[3])
+          state = verify_release_identity(
+              Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], is_draft=True
+          )
+          if state != "draft_publish_existing":
+              raise SystemExit(f"unsafe draft state: {state}")
+          print(expected)
+          PY
+          )"
+          test -n "$verification"
+
+      - name: Publish exact rechecked draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-and-verify.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
