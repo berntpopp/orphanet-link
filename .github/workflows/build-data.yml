@@ -161,7 +161,9 @@ jobs:
                   # A no-op is still an accepted release: require a valid
                   # provenance attestation before recording the state.
                   timeout 120s gh attestation verify "$existing_dir/orphanet.sqlite.gz" \
-                    --repo "$GITHUB_REPOSITORY"
+                    --repo "$GITHUB_REPOSITORY" \
+                    --signer-workflow "berntpopp/orphanet-link/.github/workflows/build-data.yml" \
+                    --source-ref "$GITHUB_REF"
                   echo "state=$state" >> "$GITHUB_OUTPUT"
                   echo "Release $TAG has identical verified assets: $state."
                   ;;
@@ -333,7 +335,9 @@ jobs:
               raise SystemExit("sealed handoff tag mismatch")
           PY
             timeout 120s gh attestation verify "$remote_dir/orphanet.sqlite.gz" \
-              --repo "$GITHUB_REPOSITORY"
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "berntpopp/orphanet-link/.github/workflows/build-data.yml" \
+              --source-ref "$GITHUB_REF"
           }
 
           # GitHub has no conditional release-edit primitive. Recheck the API

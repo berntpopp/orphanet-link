@@ -83,6 +83,18 @@ def test_published_noop_requires_provenance_before_state_output() -> None:
     assert "timeout 120s" in script
 
 
+def test_every_attestation_check_pins_the_reviewed_workflow_and_source_ref() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    checks = workflow_text.count("gh attestation verify")
+    signer = '--signer-workflow "berntpopp/orphanet-link/.github/workflows/build-data.yml"'
+    assert checks == 2
+    assert workflow_text.count(signer) == checks
+    assert workflow_text.count('--source-ref "$GITHUB_REF"') == checks
+    # A different workflow identity, including a caller-controlled value, must
+    # not be accepted by any of the release attestation checks.
+    assert '--signer-workflow "$GITHUB_REPOSITORY' not in workflow_text
+
+
 def test_build_and_publisher_permissions_are_separated() -> None:
     workflow = _workflow()
     assert workflow["permissions"] == {}
