@@ -89,6 +89,8 @@ Consolidated Dependabot sweep. No runtime behaviour change.
   update the dataset while retaining its human version string; the revision suffix prevents a
   newer dataset from colliding with an older immutable tag while preserving fail-closed identity
   verification.
+- Correct the immutable `actions/attest-build-provenance` v2.2.0 pin used by the protected data
+  publisher so the attestation action resolves before draft creation.
 
 - **`.github/dependabot.yml` watched only `github-actions`.** This repo's Python (uv)
   dependencies, its Docker base image, and its Compose stack had therefore never been

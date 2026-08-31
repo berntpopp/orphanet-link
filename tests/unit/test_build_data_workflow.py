@@ -160,7 +160,11 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
         "attestations": "write",
     }
     steps = publish["steps"]  # type: ignore[index]
-    assert any("actions/attest-build-provenance@" in step.get("uses", "") for step in steps)
+    assert any(
+        step.get("uses")
+        == "actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4"
+        for step in steps
+    )
     scripts = "\n".join(_run_blocks({"jobs": {"publish": publish}}))
     assert "gh attestation verify" in scripts
 

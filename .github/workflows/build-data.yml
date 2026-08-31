@@ -249,7 +249,7 @@ jobs:
             release-package/assets/orphanet.sqlite.gz.sha256 \
             release-package/assets/manifest.json
       - name: Attest the exact release subject
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409a5 # v2.2.0
+        uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
           subject-path: release-package/assets/orphanet.sqlite.gz
 
