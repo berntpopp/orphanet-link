@@ -166,3 +166,44 @@ def test_rejects_unapproved_asset_redirect_before_following_it(tmp_path: Path) -
             token=TEST_TOKEN,
             transport=httpx.MockTransport(handler),
         )
+
+
+def test_discovers_an_authenticated_draft_when_tag_lookup_returns_404(tmp_path: Path) -> None:
+    manifest = b"{}"
+    bundle = b"gzip"
+    checksum = b"checksum"
+    assets = [
+        _asset("manifest.json", manifest, 1),
+        _asset("orphanet.sqlite.gz", bundle, 2),
+        _asset("orphanet.sqlite.gz.sha256", checksum, 3),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/tags/" + TAG):
+            return httpx.Response(404, request=request)
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(
+                200,
+                json=[{"id": 7, "tag_name": TAG, "draft": True, "assets": assets}],
+                request=request,
+            )
+        for identifier, content in ((1, manifest), (2, bundle), (3, checksum)):
+            if request.url.path.endswith(f"/assets/{identifier}"):
+                return httpx.Response(200, content=content, request=request)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    result = fetch_existing_release(
+        REPO,
+        TAG,
+        tmp_path / "release",
+        token=TEST_TOKEN,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result is not None
+    assert result.is_draft is True
+    assert {path.name for path in (tmp_path / "release").iterdir()} == {
+        "manifest.json",
+        "orphanet.sqlite.gz",
+        "orphanet.sqlite.gz.sha256",
+    }

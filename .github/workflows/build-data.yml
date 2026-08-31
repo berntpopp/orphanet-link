@@ -270,7 +270,15 @@ jobs:
             remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
             release_json="${remote_dir}.json"
             # Bind the checked draft to the exact API release before promotion.
-            timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_json"
+            api_url="$(timeout 30s gh release view "$TAG" --json apiUrl \
+              --repo "$GITHUB_REPOSITORY" --jq .apiUrl)"
+            api_prefix="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/"
+            case "$api_url" in
+              "$api_prefix"*) release_id="${api_url#"$api_prefix"}" ;;
+              *) echo "release API identity is outside the repository" >&2; return 1 ;;
+            esac
+            [[ "$release_id" =~ ^[1-9][0-9]*$ ]] || return 1
+            timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$release_json"
             test "$(wc -c < "$release_json")" -le 1048576
             python3 - "$release_json" "$expected_draft" <<'PY'
           import json

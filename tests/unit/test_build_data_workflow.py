@@ -140,6 +140,8 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
+    assert 'gh release view "$TAG" --json apiUrl' in script
+    assert "releases/$release_id" in script
     assert "orphanet-release-assets" in str(publish_steps)
 
 
