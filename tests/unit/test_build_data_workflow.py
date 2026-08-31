@@ -89,7 +89,10 @@ def test_every_attestation_check_pins_the_reviewed_workflow_and_source_ref() -> 
     signer = '--signer-workflow "berntpopp/orphanet-link/.github/workflows/build-data.yml"'
     assert checks == 2
     assert workflow_text.count(signer) == checks
-    assert workflow_text.count('--source-ref "$GITHUB_REF"') == checks
+    # Every accepted release is produced from the reviewed main branch.  A
+    # mutable tag ref must never become an equivalent signer identity.
+    assert workflow_text.count('--source-ref "refs/heads/main"') == checks
+    assert '--source-ref "$GITHUB_REF"' not in workflow_text
     # A different workflow identity, including a caller-controlled value, must
     # not be accepted by any of the release attestation checks.
     assert '--signer-workflow "$GITHUB_REPOSITORY' not in workflow_text
@@ -137,7 +140,10 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
     workflow = _workflow()
     publish = workflow["jobs"]["publish"]  # type: ignore[index]
     assert "github.ref == 'refs/heads/main'" in publish["if"]
-    assert "startsWith(github.ref, 'refs/tags/')" in publish["if"]
+    # Tag dispatches can build and verify read-only, but must never obtain the
+    # privileged publisher: tag provenance cannot satisfy the main-only
+    # release identity contract.
+    assert "startsWith(github.ref, 'refs/tags/')" not in publish["if"]
     assert "github.ref_protected == true" in publish["if"]
     assert "needs.build-and-verify.outputs.state == 'create'" in publish["if"]
     assert publish["environment"] == "data-release"
