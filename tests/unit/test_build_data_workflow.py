@@ -32,13 +32,11 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
 
 
 def test_existing_release_downloads_exact_assets_and_compares_identity() -> None:
-    blocks = _run_blocks(_workflow())
-    check = next(block for block in blocks if "releases/tags" in block)
-    assert "gh release download" in check
-    assert "manifest.json" in check
-    assert "orphanet.sqlite.gz.sha256" in check
-    assert "verify_release_identity" in check
-    assert "read_release_identity" in check
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "orphanet_link.ingest.release_assets" in workflow_text
+    assert "gh release download" not in workflow_text
+    assert "verify_release_identity" in workflow_text
+    assert "read_release_identity" in workflow_text
     helper = (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
     assert "schema_version" in helper
     assert "disorder_count" in helper
@@ -46,11 +44,11 @@ def test_existing_release_downloads_exact_assets_and_compares_identity() -> None
 
 def test_release_api_ambiguity_fails_closed() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
-    check = next(block for block in _run_blocks(_workflow()) if "releases/tags" in block)
     assert "continue-on-error" not in workflow_text
-    assert "|| true" not in check
-    assert "collision" in check
-    assert "exit 1" in check
+    assert "|| true" not in workflow_text
+    helper = (ROOT / "orphanet_link/ingest/release_assets.py").read_text()
+    assert "httpx.codes.NOT_FOUND" in helper
+    assert "!= httpx.codes.OK" in helper
 
 
 def test_identity_states_gate_mutation_without_delete_or_clobber() -> None:
@@ -64,3 +62,25 @@ def test_identity_states_gate_mutation_without_delete_or_clobber() -> None:
         step.get("if") == "steps.release_state.outputs.state == 'create'"
         for step in _steps(_workflow())
     )
+
+
+def test_existing_release_retrieval_is_bounded_and_inventory_aware() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "orphanet_link.ingest.release_assets" in workflow_text
+    assert "gh release download" not in workflow_text
+    assert "MAX_METADATA_BYTES" in (ROOT / "orphanet_link/ingest/release_assets.py").read_text()
+
+
+def test_build_and_publisher_permissions_are_separated() -> None:
+    workflow = _workflow()
+    assert workflow["permissions"] == {}
+    jobs = workflow["jobs"]
+    assert jobs["build-and-verify"]["permissions"] == {"contents": "read"}  # type: ignore[index]
+    assert jobs["publish"]["permissions"] == {"contents": "write"}  # type: ignore[index]
+
+
+def test_create_is_atomic_and_does_not_use_an_overwriting_action() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "softprops/action-gh-release" not in workflow_text
+    assert "gh release create" in workflow_text
+    assert "--clobber" not in workflow_text

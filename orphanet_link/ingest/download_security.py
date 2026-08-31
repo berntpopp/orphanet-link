@@ -64,7 +64,9 @@ def open_validated_stream(
     }
     for hop in range(policy.max_redirects + 1):
         validate_https_url(current, policy)
-        request = client.build_request("GET", current, headers=safe_headers)
+        request = client.build_request(
+            "GET", current, headers=headers if hop == 0 else safe_headers
+        )
         response = client.send(request, stream=True, follow_redirects=False)
         if response.status_code not in _REDIRECT_CODES:
             try:

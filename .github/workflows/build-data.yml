@@ -24,14 +24,19 @@ on:
     paths:
       - "orphanet_link/ingest/**"
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
-  build-and-publish:
-    name: Build SQLite and publish release assets
+  build-and-verify:
+    name: Build SQLite and verify release identity
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      state: ${{ steps.release_state.outputs.state }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Checkout
@@ -120,7 +125,6 @@ jobs:
           CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-current-release
         run: |
           set -euo pipefail
-          response="$RUNNER_TEMP/orphanet-release-response"
           existing_dir="$RUNNER_TEMP/orphanet-existing-release"
           uv run python - "$CURRENT_RELEASE_DIR" "$TAG" <<'PY'
           import sys
@@ -130,88 +134,95 @@ jobs:
 
           print(read_release_identity(Path(sys.argv[1]), sys.argv[2]))
           PY
-          if gh api --include "/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" >"$response"; then
-            status="$(sed -n '1s#^HTTP/[^ ]* \([0-9][0-9][0-9]\).*#\1#p' "$response")"
-            test "$status" = 200
-            body="$(sed -n '/^{/,$p' "$response")"
-            is_draft="$(printf '%s' "$body" | jq -er 'if (.draft | type) == "boolean" then .draft else error("invalid draft state") end')"
-            mkdir "$existing_dir"
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --pattern manifest.json \
-              --pattern orphanet.sqlite.gz \
-              --pattern orphanet.sqlite.gz.sha256 \
-              --dir "$existing_dir"
-            state="$(uv run python - "$CURRENT_RELEASE_DIR" "$existing_dir" "$TAG" "$is_draft" <<'PY'
+          remote_state="$(uv run python -m orphanet_link.ingest.release_assets \
+            "$GITHUB_REPOSITORY" "$TAG" "$existing_dir")"
+          case "$remote_state" in
+            absent)
+              echo "state=create" >> "$GITHUB_OUTPUT"
+              echo "Release $TAG does not exist — will create a draft."
+              ;;
+            published|draft)
+              state="$(uv run python - "$CURRENT_RELEASE_DIR" "$existing_dir" "$TAG" "$remote_state" <<'PY'
           import sys
           from pathlib import Path
 
           from orphanet_link.ingest.release_identity import verify_release_identity
 
           print(verify_release_identity(
-              Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], is_draft=sys.argv[4] == "true"
+              Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], is_draft=sys.argv[4] == "draft"
           ))
           PY
-            )"
-            case "$state" in
-              published_noop|draft_publish_existing)
-                echo "state=$state" >> "$GITHUB_OUTPUT"
-                echo "Release $TAG has identical verified assets: $state."
-                ;;
-              collision)
-                echo "Release $TAG exists but its verified identity differs." >&2
-                echo "collision" >&2
-                exit 1
-                ;;
-              *)
-                echo "Unexpected release identity state: $state" >&2
-                echo "collision" >&2
-                exit 1
-                ;;
-            esac
-          else
-            status="$(sed -n '1s#^HTTP/[^ ]* \([0-9][0-9][0-9]\).*#\1#p' "$response")"
-            if test "$status" = 404; then
-              echo "state=create" >> "$GITHUB_OUTPUT"
-              echo "Release $TAG does not exist — will publish."
-            else
-              echo "Unable to determine release state (HTTP ${status:-unknown}); refusing mutation." >&2
-              echo "collision" >&2
+              )"
+              case "$state" in
+                published_noop|draft_publish_existing)
+                  echo "state=$state" >> "$GITHUB_OUTPUT"
+                  echo "Release $TAG has identical verified assets: $state."
+                  ;;
+                collision)
+                  echo "Release $TAG exists but its verified identity differs." >&2
+                  exit 1
+                  ;;
+                *)
+                  echo "Unexpected release identity state: $state" >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "Unexpected remote release state: $remote_state" >&2
               exit 1
-            fi
-          fi
+              ;;
+          esac
 
       # -----------------------------------------------------------------------
-      # 5. Publish only after a verified create or draft transition
+      # 5. Transfer only a verified new package to the privileged publisher
       # -----------------------------------------------------------------------
-      - name: Publish existing draft release
-        if: steps.release_state.outputs.state == 'draft_publish_existing'
+      - name: Upload verified create package
+        if: steps.release_state.outputs.state == 'create'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: orphanet-create-assets
+          path: ${{ runner.temp }}/orphanet-current-release
+          if-no-files-found: error
+
+  publish:
+    name: Publish only a verified draft or create package
+    needs: build-and-verify
+    if: needs.build-and-verify.outputs.state == 'draft_publish_existing' || needs.build-and-verify.outputs.state == 'create'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified create package
+        if: needs.build-and-verify.outputs.state == 'create'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: orphanet-create-assets
+          path: release-assets
+
+      - name: Publish an existing verified draft
+        if: needs.build-and-verify.outputs.state == 'draft_publish_existing'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.meta.outputs.tag }}
+          TAG: ${{ needs.build-and-verify.outputs.tag }}
         run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
 
-      - name: Publish GitHub Release
-        if: steps.release_state.outputs.state == 'create'
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-        with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: "Orphanet data ${{ steps.meta.outputs.version }}"
-          body: |
-            Prebuilt Orphanet SQLite database for [orphanet-link](https://github.com/berntpopp/orphanet-link).
-
-            **Orphanet data version:** ${{ steps.meta.outputs.version }}
-
-            **License:** Data from Orphadata is CC BY 4.0.
-            Required attribution: *Orphadata Science: Free access data from Orphanet. © INSERM 1999. Available on http://sciences.orphadata.com/*
-
-            **Assets**
-            | File | Description |
-            |------|-------------|
-            | `orphanet.sqlite.gz` | Gzip-compressed SQLite database |
-            | `orphanet.sqlite.gz.sha256` | SHA-256 checksum of the gz file |
-            | `manifest.json` | Build provenance (version, counts, schema_version) |
-          files: |
-            data/orphanet.sqlite.gz
-            data/orphanet.sqlite.gz.sha256
-            data/manifest.json
-          fail_on_unmatched_files: true
+      - name: Atomically create and publish a new release
+        if: needs.build-and-verify.outputs.state == 'create'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-and-verify.outputs.tag }}
+          VERSION: ${{ needs.build-and-verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Orphanet data $VERSION" \
+            --notes "Prebuilt Orphanet SQLite database. Data: Orphadata CC BY 4.0, © INSERM." \
+            --draft \
+            release-assets/orphanet.sqlite.gz \
+            release-assets/orphanet.sqlite.gz.sha256 \
+            release-assets/manifest.json
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

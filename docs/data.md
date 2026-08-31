@@ -102,6 +102,10 @@ to GitHub Releases:
   verify any existing release's exact assets, source version, schema, and counts
   → no-op only for an identical published release, promote an identical draft,
   or create a new Release. Any mismatch or ambiguous API result fails closed.
+  GitHub metadata and every asset are size- and deadline-bounded, authenticated
+  before redirects, and compared with GitHub's advertised SHA-256 digests. The
+  unprivileged build/verify job cannot write releases; only the create/draft
+  transition runs with `contents: write`.
 
 **Runtime (`services/data_resolver.py`)**, on local/development server start with
 `AUTO_BOOTSTRAP=true`:

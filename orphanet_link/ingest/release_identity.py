@@ -93,6 +93,11 @@ def _manifest(value: bytes) -> Mapping[str, object]:
         raise ReleaseIdentityError("manifest.json is invalid JSON") from error
     if not isinstance(parsed, dict):
         raise ReleaseIdentityError("manifest.json must be an object")
+    return _validate_manifest(parsed)
+
+
+def _validate_manifest(parsed: Mapping[str, object]) -> Mapping[str, object]:
+    """Validate the stable manifest shape whether it came from JSON or a mapping."""
     keys = set(parsed)
     if keys - (_MANIFEST_FIELDS | _OPTIONAL_MANIFEST_FIELDS) or not keys >= _MANIFEST_FIELDS:
         raise ReleaseIdentityError("manifest.json has an incomplete or unexpected shape")
@@ -104,7 +109,8 @@ def _manifest(value: bytes) -> Mapping[str, object]:
     if type(parsed["schema_version"]) is not int or parsed["schema_version"] < 1:
         raise ReleaseIdentityError("manifest.json has an invalid schema_version")
     for key in _COUNT_FIELDS:
-        if type(parsed[key]) is not int or parsed[key] < 0:
+        count = parsed[key]
+        if type(count) is not int or count < 0:
             raise ReleaseIdentityError(f"manifest.json has an invalid {key}")
     if "build_utc" in parsed and (type(parsed["build_utc"]) is not str or not parsed["build_utc"]):
         raise ReleaseIdentityError("manifest.json has an invalid build_utc")
@@ -172,14 +178,54 @@ def classify_release(
     is_draft: bool,
 ) -> ReleaseState:
     """Return a typed mutation state, rejecting incomplete or differing identities."""
+    current_identity = _mapping_identity(current)
     if existing is None:
         return "create"
-    required = {"tag", "assets", "bundle_sha256", "bundle_size", "manifest"}
-    if not required <= set(existing):
-        raise ReleaseIdentityError("exact release assets and identity are required")
-    if current != existing:
+    existing_identity = _mapping_identity(existing)
+    if current_identity != existing_identity:
         return "collision"
     return "draft_publish_existing" if is_draft else "published_noop"
+
+
+def _mapping_identity(value: Mapping[str, object]) -> ReleaseIdentity:
+    """Reject malformed mapping inputs before they can select a no-op state."""
+    required = {"tag", "assets", "bundle_sha256", "bundle_size", "manifest"}
+    if set(value) != required:
+        raise ReleaseIdentityError("exact release assets have an invalid identity shape")
+    tag = value["tag"]
+    assets = value["assets"]
+    digest = value["bundle_sha256"]
+    size = value["bundle_size"]
+    manifest = value["manifest"]
+    if type(tag) is not str or not _VERSION_TAG.fullmatch(tag):
+        raise ReleaseIdentityError("release identity has an invalid tag")
+    if (
+        not isinstance(assets, list)
+        or any(type(name) is not str for name in assets)
+        or len(assets) != len(set(assets))
+        or set(assets) != RELEASE_ASSETS
+    ):
+        raise ReleaseIdentityError("release identity has an invalid asset inventory")
+    if type(digest) is not str or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ReleaseIdentityError("release identity has an invalid bundle_sha256")
+    if type(size) is not int or size < 0 or size > MAX_ASSET_BYTES:
+        raise ReleaseIdentityError("release identity has an invalid bundle_size")
+    if not isinstance(manifest, Mapping):
+        raise ReleaseIdentityError("release identity has an invalid manifest")
+    parsed = _validate_manifest(manifest)
+    version = cast(str, parsed["version"])
+    if _tag_for_version(version) != tag:
+        raise ReleaseIdentityError("release identity manifest version does not match tag")
+    return ReleaseIdentity(
+        tag=tag,
+        version=version,
+        orphanet_date=cast(str, parsed["orphanet_date"]),
+        schema_version=cast(int, parsed["schema_version"]),
+        asset=ASSET_NAME,
+        bundle_sha256=digest,
+        bundle_size=size,
+        counts=tuple((key, cast(int, parsed[key])) for key in _COUNT_FIELDS),
+    )
 
 
 def compare_release_directories(

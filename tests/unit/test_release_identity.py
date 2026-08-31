@@ -52,6 +52,19 @@ def test_identical_published_and_draft_states_are_distinct() -> None:
     assert classify_release(current, None, is_draft=False) == "create"  # type: ignore[arg-type]
 
 
+def test_equal_malformed_identities_fail_closed() -> None:
+    malformed: dict[str, object] = {
+        "tag": 7,
+        "assets": [],
+        "bundle_sha256": None,
+        "bundle_size": "large",
+        "manifest": [],
+    }
+
+    with pytest.raises(ReleaseIdentityError, match="invalid"):
+        classify_release(malformed, malformed, is_draft=False)
+
+
 def test_read_release_identity_requires_exact_assets_and_bounded_metadata(tmp_path: Path) -> None:
     (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ReleaseIdentityError, match="exact release assets"):
