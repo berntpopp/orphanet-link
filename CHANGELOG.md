@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Verify Orphanet release assets, source identity, schema, and counts before
+  treating an existing data tag as idempotent; differing or ambiguous releases
+  now fail closed without mutation.
+- Bound and authenticate release metadata/assets, reject an inexact remote asset
+  inventory, and separate read-only building from the narrowly privileged,
+  create-only publisher.
+
 ## [0.4.4] - 2026-08-31
 
 ### Changed
@@ -77,6 +84,11 @@ No runtime behaviour change.
 Consolidated Dependabot sweep. No runtime behaviour change.
 
 ### Fixed
+
+- Qualify new Orphanet data-release tags with the exact `orphanet_date` revision. Orphadata can
+  update the dataset while retaining its human version string; the revision suffix prevents a
+  newer dataset from colliding with an older immutable tag while preserving fail-closed identity
+  verification.
 
 - **`.github/dependabot.yml` watched only `github-actions`.** This repo's Python (uv)
   dependencies, its Docker base image, and its Compose stack had therefore never been
