@@ -13,10 +13,13 @@ from typing import Literal, cast
 
 MAX_METADATA_BYTES = 1 << 20
 MAX_ASSET_BYTES = 4 * 1024**3
+MAX_RELEASE_ID = (1 << 63) - 1
 ASSET_NAME = "orphanet.sqlite.gz"
 CHECKSUM_NAME = f"{ASSET_NAME}.sha256"
 RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, "manifest.json"})
 _VERSION_TAG = re.compile(r"^data-[0-9A-Za-z][0-9A-Za-z.-]*$")
+_AUDITED_VERSION = "1.3.42 / 4.1.8 [2025-03-03]"
+_AUDITED_ORPHANET_DATE = "2025-12-09 07:06:32"
 _COUNT_FIELDS = (
     "disorder_count",
     "xref_count",
@@ -34,6 +37,13 @@ ReleaseState = Literal["create", "published_noop", "draft_publish_existing", "co
 
 class ReleaseIdentityError(ValueError):
     """A release cannot be treated as an exact immutable identity."""
+
+
+def validate_release_id(value: object) -> int:
+    """Return a GitHub ID within the bounded signed-64-bit API range."""
+    if type(value) is not int or not 0 < value <= MAX_RELEASE_ID:
+        raise ReleaseIdentityError("release ID is outside the safe bound")
+    return value
 
 
 @dataclass(frozen=True)
@@ -149,7 +159,7 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     digest, size = _hash_asset(release_dir / ASSET_NAME)
     _checksum(_read_metadata(release_dir / CHECKSUM_NAME), digest)
     version = str(manifest["version"])
-    if release_tag(version, str(manifest["orphanet_date"])) != tag:
+    if not _tag_matches_manifest(version, str(manifest["orphanet_date"]), tag):
         raise ReleaseIdentityError("manifest version does not match release tag")
     return ReleaseIdentity(
         tag=tag,
@@ -163,7 +173,12 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     )
 
 
-def release_tag(version: str, orphanet_date: str) -> str:
+def release_tag(
+    version: str,
+    orphanet_date: str,
+    *,
+    collision_revision: int | None = None,
+) -> str:
     """Return a readable tag bound to the upstream dataset revision."""
     slug = re.sub(r"[^0-9A-Za-z.]+", "-", version).strip("-")
     slug = re.sub(r"-+", "-", slug)
@@ -173,7 +188,33 @@ def release_tag(version: str, orphanet_date: str) -> str:
         revision = datetime.strptime(orphanet_date, "%Y-%m-%d %H:%M:%S")
     except ValueError as error:
         raise ReleaseIdentityError("manifest has an invalid orphanet_date") from error
-    return f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
+    tag = f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
+    if collision_revision is None:
+        return tag
+    if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        raise ReleaseIdentityError("collision revision is only supported for the audited source")
+    if type(collision_revision) is not int or collision_revision != 2:
+        raise ReleaseIdentityError("collision revision must be exactly revision 2")
+    return f"{tag}-r{collision_revision}"
+
+
+def publication_tag(version: str, orphanet_date: str) -> str:
+    """Select the audited collision tag only for the known historical dataset."""
+    base = release_tag(version, orphanet_date)
+    if (version, orphanet_date) == (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        return release_tag(version, orphanet_date, collision_revision=2)
+    return base
+
+
+def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
+    """Accept the base identity or the one audited collision revision."""
+    base = release_tag(version, orphanet_date)
+    if tag == base:
+        return True
+    if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
+        return False
+    suffix = tag.removeprefix(f"{base}-r")
+    return tag.startswith(f"{base}-r") and suffix == "2"
 
 
 def classify_release(
@@ -219,7 +260,7 @@ def _mapping_identity(value: Mapping[str, object]) -> ReleaseIdentity:
         raise ReleaseIdentityError("release identity has an invalid manifest")
     parsed = _validate_manifest(manifest)
     version = cast(str, parsed["version"])
-    if release_tag(version, cast(str, parsed["orphanet_date"])) != tag:
+    if not _tag_matches_manifest(version, cast(str, parsed["orphanet_date"]), tag):
         raise ReleaseIdentityError("release identity manifest version does not match tag")
     return ReleaseIdentity(
         tag=tag,

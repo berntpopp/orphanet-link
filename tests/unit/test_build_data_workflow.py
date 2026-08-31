@@ -43,8 +43,9 @@ def test_existing_release_downloads_exact_assets_and_compares_identity() -> None
 
 def test_release_tag_is_qualified_by_the_exact_dataset_revision() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
-    assert "release_tag" in workflow_text
+    assert "publication_tag" in workflow_text
     assert "orphanet_date" in workflow_text
+    assert "collision_revision=2" in (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
     assert 'TAG="data-$SLUG"' not in workflow_text
 
 
@@ -108,6 +109,10 @@ def test_every_attestation_check_pins_the_reviewed_workflow_and_source_ref() -> 
 def test_build_and_publisher_permissions_are_separated() -> None:
     workflow = _workflow()
     assert workflow["permissions"] == {}
+    assert workflow["concurrency"] == {
+        "group": "orphanet-data-${{ github.ref }}",
+        "cancel-in-progress": False,
+    }
     jobs = workflow["jobs"]
     assert jobs["build-and-verify"]["permissions"] == {"contents": "read"}  # type: ignore[index]
     assert jobs["publish"]["permissions"] == {  # type: ignore[index]
@@ -117,11 +122,23 @@ def test_build_and_publisher_permissions_are_separated() -> None:
     }
 
 
-def test_create_is_atomic_and_does_not_use_an_overwriting_action() -> None:
+def test_create_binds_api_identity_and_does_not_use_an_overwriting_action() -> None:
+    workflow = _workflow()
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "softprops/action-gh-release" not in workflow_text
-    assert "gh release create" in workflow_text
+    assert "gh api --method POST" in workflow_text
+    assert "gh release create" not in workflow_text
     assert "--clobber" not in workflow_text
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    create = next(
+        step for step in publish_steps if step.get("name") == "Create and upload exact-ID draft"
+    )
+    assert create["id"] == "create_draft"
+    script = create["run"]
+    assert "created release response" in script
+    assert "inventory_tag" not in script
+    assert "upload_asset" in script
+    assert "release_id=$release_id" in script
 
 
 def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish() -> None:
@@ -129,7 +146,7 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     workflow = _workflow()
     publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
     names = [step.get("name", "") for step in publish_steps]  # type: ignore[union-attr]
-    create_draft = names.index("Atomically create a new draft")
+    create_draft = names.index("Create and upload exact-ID draft")
     publish = names.index("Publish exact rechecked draft")
     assert create_draft < publish
     script = publish_steps[publish]["run"]  # type: ignore[index]
@@ -140,9 +157,108 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
-    assert 'gh release view "$TAG" --json apiUrl' in script
+    assert 'gh release view "$TAG"' not in script
+    assert 'gh release edit "$TAG"' not in script
+    assert "RELEASE_ID" in script
     assert "releases/$release_id" in script
+    patch = script.index("gh api --method PATCH")
+    assert script.index('"repos/$GITHUB_REPOSITORY/releases/$release_id"', patch) > patch
+    assert "git/ref/tags/$TAG" in script
     assert "orphanet-release-assets" in str(publish_steps)
+
+
+def test_published_noop_rechecks_release_identity_and_source_tag() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    build = workflow_text[
+        workflow_text.index("Verify existing release identity") : workflow_text.index(
+            "# 5. Transfer"
+        )
+    ]
+    assert "immutable" in build
+    assert "target_commitish" in build
+    assert "git/ref/tags/$TAG" in build
+    assert "releases/$release_id" in build
+
+
+def test_existing_correct_draft_may_defer_an_absent_source_tag_until_promotion() -> None:
+    """A draft created through the API can precede its Git tag ref."""
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    build = workflow_text[
+        workflow_text.index("Verify existing release identity") : workflow_text.index(
+            "# 5. Transfer"
+        )
+    ]
+    assert 'gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG"' in build
+    assert "source tag probe returned 404 for draft" in build
+    assert "published release requires an exact present source tag" in build
+
+
+def test_new_draft_absent_source_tag_is_created_after_final_verification() -> None:
+    """The writer owns the missing ref creation immediately before promotion."""
+    workflow = _workflow()
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    publish = next(
+        step for step in publish_steps if step.get("name") == "Publish exact rechecked draft"
+    )
+    script = publish["run"]
+    verify = script.index("verify_remote true")
+    ensure = script.index("ensure_source_tag()")
+    patch = script.index("gh api --method PATCH")
+    assert verify < ensure < patch
+    assert "git/refs" in script
+    assert '"ref=refs/tags/$TAG"' in script
+    assert "source tag creation response" in script
+
+
+def test_selected_draft_id_crosses_the_build_publisher_boundary() -> None:
+    workflow = _workflow()
+    build = workflow["jobs"]["build-and-verify"]  # type: ignore[index]
+    publish = workflow["jobs"]["publish"]  # type: ignore[index]
+    assert build["outputs"]["release_id"] == "${{ steps.release_state.outputs.release_id }}"
+    publish_step = next(
+        step for step in publish["steps"] if step.get("name") == "Publish exact rechecked draft"
+    )
+    assert publish_step["env"]["RELEASE_ID"] == (
+        "${{ needs.build-and-verify.outputs.release_id || steps.create_draft.outputs.release_id }}"
+    )
+    assert not any(step.get("name") == "Bind existing exact draft ID" for step in publish["steps"])
+
+
+def test_created_release_id_is_refetched_and_bound_before_publishing() -> None:
+    workflow = _workflow()
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    create = next(
+        step for step in publish_steps if step.get("name") == "Create and upload exact-ID draft"
+    )
+    script = create["run"]
+    assert "releases/$release_id" in script
+    assert "release API identity changed unexpectedly" in script
+
+
+def test_create_uses_api_response_id_without_replacing_it_from_tag_inventory() -> None:
+    workflow = _workflow()
+    create = next(
+        step
+        for step in workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Create and upload exact-ID draft"
+    )
+    script = create["run"]
+    assert "gh api --method POST" in script
+    assert "created release response" in script
+    assert 'inventory_tag "$after"' not in script
+
+
+def test_annotated_source_tags_are_explicitly_rejected() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "lightweight commit" in workflow_text
+    assert workflow_text.count('target.get("type") != "commit"') >= 3
+
+
+def test_writer_bounds_ids_and_times_out_create() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "2**63 - 1" in workflow_text
+    assert "timeout 30s gh api --method POST" in workflow_text
+    assert "timeout 120s gh api --method POST" in workflow_text
 
 
 def test_publisher_is_trusted_and_can_generate_provenance() -> None:

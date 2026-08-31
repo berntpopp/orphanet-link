@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Advance the Orphanet data identity to collision revision `-r2` while retaining
+  both audited base-tag drafts, and bind publication to one numeric release ID.
+
 - Verify Orphanet release assets, source identity, schema, and counts before
   treating an existing data tag as idempotent; differing or ambiguous releases
   now fail closed without mutation.

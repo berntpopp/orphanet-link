@@ -29,8 +29,23 @@ def _asset(name: str, content: bytes, identifier: int) -> dict[str, object]:
     }
 
 
-def _release(assets: list[dict[str, object]]) -> dict[str, object]:
-    return {"draft": False, "assets": assets}
+def _release(
+    assets: list[dict[str, object]],
+    *,
+    release_id: int = 99,
+    tag_name: str = TAG,
+    target_commitish: str = "reviewed-source",
+    draft: bool = False,
+    immutable: bool = True,
+) -> dict[str, object]:
+    return {
+        "id": release_id,
+        "tag_name": tag_name,
+        "target_commitish": target_commitish,
+        "draft": draft,
+        "immutable": immutable,
+        "assets": assets,
+    }
 
 
 def test_rejects_missing_or_extra_remote_asset_inventory(tmp_path: Path) -> None:
@@ -184,7 +199,16 @@ def test_discovers_an_authenticated_draft_when_tag_lookup_returns_404(tmp_path: 
         if request.url.path.endswith("/releases"):
             return httpx.Response(
                 200,
-                json=[{"id": 7, "tag_name": TAG, "draft": True, "assets": assets}],
+                json=[
+                    {
+                        "id": 7,
+                        "tag_name": TAG,
+                        "target_commitish": "reviewed-source",
+                        "draft": True,
+                        "immutable": False,
+                        "assets": assets,
+                    }
+                ],
                 request=request,
             )
         for identifier, content in ((1, manifest), (2, bundle), (3, checksum)):
@@ -202,8 +226,91 @@ def test_discovers_an_authenticated_draft_when_tag_lookup_returns_404(tmp_path: 
 
     assert result is not None
     assert result.is_draft is True
+    assert result.release_id == 7
+    assert result.tag_name == TAG
     assert {path.name for path in (tmp_path / "release").iterdir()} == {
         "manifest.json",
         "orphanet.sqlite.gz",
         "orphanet.sqlite.gz.sha256",
     }
+
+
+def test_rejects_published_release_with_wrong_response_identity(tmp_path: Path) -> None:
+    assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
+    assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets, tag_name="other-tag"), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="tag"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_rejects_mutable_published_release(tmp_path: Path) -> None:
+    assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
+    assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets, immutable=False), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="immutable"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_rejects_unbounded_release_id(tmp_path: Path) -> None:
+    assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
+    assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_release(assets, release_id=2**63), request=request)
+
+    with pytest.raises(ReleaseAssetError, match="release ID"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_rejects_hidden_same_tag_draft_for_published_release(tmp_path: Path) -> None:
+    contents = {
+        "manifest.json": b"{}",
+        "orphanet.sqlite.gz": b"gzip",
+        "orphanet.sqlite.gz.sha256": b"checksum",
+    }
+    assets = [_asset(name, body, index) for index, (name, body) in enumerate(contents.items(), 1)]
+    published = _release(assets, release_id=10)
+    hidden_draft = _release(assets, release_id=11, draft=True, immutable=False)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/tags/" + TAG):
+            return httpx.Response(200, json=published, request=request)
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(200, json=[published, hidden_draft], request=request)
+        for asset in assets:
+            if request.url.path.endswith(f"/assets/{asset['id']}"):
+                return httpx.Response(200, content=contents[asset["name"]], request=request)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    with pytest.raises(ReleaseAssetError, match="duplicate"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )

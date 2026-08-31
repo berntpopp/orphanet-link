@@ -26,6 +26,12 @@ on:
 
 permissions: {}
 
+# GitHub permits multiple draft releases with one tag. Serialize every run for
+# a ref so two scheduled/manual publishers cannot create competing drafts.
+concurrency:
+  group: orphanet-data-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-verify:
     name: Build SQLite and verify release identity
@@ -37,6 +43,7 @@ jobs:
       state: ${{ steps.release_state.outputs.state }}
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
+      release_id: ${{ steps.release_state.outputs.release_id }}
 
     steps:
       - name: Checkout
@@ -63,13 +70,13 @@ jobs:
           import sys
           from pathlib import Path
 
-          from orphanet_link.ingest.release_identity import release_tag
+          from orphanet_link.ingest.release_identity import publication_tag
 
           with sqlite3.connect("data/orphanet.sqlite") as connection:
               version, orphanet_date = connection.execute(
                   "SELECT orphanet_version, orphanet_date FROM meta WHERE id = 1"
               ).fetchone()
-          tag = release_tag(version, orphanet_date)
+          tag = publication_tag(version, orphanet_date)
           with Path(sys.argv[1]).open("a", encoding="utf-8") as output:
               print(f"tag={tag}", file=output)
               print(f"version={version}", file=output)
@@ -144,14 +151,83 @@ jobs:
 
           print(read_release_identity(Path(sys.argv[1]), sys.argv[2]))
           PY
-          remote_state="$(uv run python -m orphanet_link.ingest.release_assets \
+          remote_metadata="$(uv run python -m orphanet_link.ingest.release_assets \
             "$GITHUB_REPOSITORY" "$TAG" "$existing_dir")"
+          remote_state="$(python3 - "$remote_metadata" <<'PY'
+          import json, sys
+          payload = json.loads(sys.argv[1])
+          if not isinstance(payload, dict) or payload.get("state") not in {"absent", "draft", "published"}:
+              raise SystemExit("release retrieval returned an invalid state")
+          print(payload["state"])
+          PY
+          )"
           case "$remote_state" in
             absent)
               echo "state=create" >> "$GITHUB_OUTPUT"
               echo "Release $TAG does not exist — will create a draft."
               ;;
             published|draft)
+              release_id="$(python3 - "$remote_metadata" <<'PY'
+          import json, sys
+          from orphanet_link.ingest.release_identity import validate_release_id
+          payload = json.loads(sys.argv[1])
+          try:
+              print(validate_release_id(payload.get("release_id")))
+          except ValueError as error:
+              raise SystemExit(str(error)) from error
+          PY
+              )"
+              remote_json="$RUNNER_TEMP/orphanet-existing-release.json"
+              timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$remote_json"
+              test "$(wc -c < "$remote_json")" -le 1048576
+              python3 - "$remote_json" "$TAG" "$GITHUB_SHA" "$remote_state" "$release_id" <<'PY'
+          import json, sys
+          from orphanet_link.ingest.release_identity import validate_release_id
+          payload = json.load(open(sys.argv[1]))
+          if validate_release_id(payload.get("id")) != int(sys.argv[5]):
+              raise SystemExit("release API identity is invalid")
+          if payload.get("tag_name") != sys.argv[2]:
+              raise SystemExit("release API tag binding is invalid")
+          if payload.get("target_commitish") != sys.argv[3]:
+              raise SystemExit("release API source binding is invalid")
+          if type(payload.get("draft")) is not bool or (payload["draft"] != (sys.argv[4] == "draft")):
+              raise SystemExit("release API draft state is invalid")
+          if sys.argv[4] == "published" and payload.get("immutable") is not True:
+              raise SystemExit("published release is not immutable")
+          PY
+              source_tag="$RUNNER_TEMP/orphanet-existing-source-tag.json"
+              set +e
+              timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+              tag_status=$?
+              set -e
+              test "$(wc -c < "$source_tag")" -le 1048576
+              python3 - "$source_tag" "$GITHUB_SHA" "$remote_state" "$tag_status" <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[4])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              if sys.argv[3] == "draft":
+                  print("source tag probe returned 404 for draft")
+                  raise SystemExit(0)
+              raise SystemExit("published release requires an exact present source tag")
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("release tag does not resolve to the exact reviewed source")
+          PY
+              echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
               state="$(uv run python - "$CURRENT_RELEASE_DIR" "$existing_dir" "$TAG" "$remote_state" <<'PY'
           import sys
           from pathlib import Path
@@ -231,7 +307,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Atomically create a new draft
+      - name: Create and upload exact-ID draft
+        id: create_draft
         if: needs.build-and-verify.outputs.state == 'create'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,15 +316,97 @@ jobs:
           VERSION: ${{ needs.build-and-verify.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Orphanet data $VERSION" \
-            --notes "Prebuilt Orphanet SQLite database. Data: Orphadata CC BY 4.0, © INSERM." \
-            --draft \
-            release-package/assets/orphanet.sqlite.gz \
-            release-package/assets/orphanet.sqlite.gz.sha256 \
-            release-package/assets/manifest.json
+          tag_probe="$RUNNER_TEMP/orphanet-create-tag-probe"
+          set +e
+          timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$tag_probe"
+          tag_status=$?
+          set -e
+          test "$(wc -c < "$tag_probe")" -le 1048576
+          python3 - "$tag_probe" "$GITHUB_SHA" "$tag_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[3])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              raise SystemExit(0)
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          # Release tags must be lightweight commit refs. Reject annotated
+          # tag objects rather than following an unbounded indirection chain.
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("pre-existing source tag does not resolve to the reviewed source")
+          PY
+          created_json="$RUNNER_TEMP/orphanet-created-release.json"
+          timeout 30s gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+            -f "tag_name=$TAG" \
+            -f "target_commitish=$GITHUB_SHA" \
+            -f "name=Orphanet data $VERSION" \
+            -f 'body=Prebuilt Orphanet SQLite database. Data: Orphadata CC BY 4.0, © INSERM.' \
+            -F draft=true > "$created_json"
+          test "$(wc -c < "$created_json")" -le 1048576
+          release_id="$(python3 - "$created_json" "$TAG" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          release = json.load(open(sys.argv[1]))
+          if not isinstance(release, dict):
+              raise SystemExit("created release response is not an object")
+          release_id = release.get("id")
+          if type(release_id) is not int or not 0 < release_id <= 2**63 - 1:
+              raise SystemExit("created release response lacks a numeric API identity")
+          if (
+              release.get("tag_name") != sys.argv[2]
+              or release.get("target_commitish") != sys.argv[3]
+              or release.get("draft") is not True
+          ):
+              raise SystemExit("created release is not the expected source-bound draft")
+          print(release_id)
+          PY
+          )"
+          upload_asset() {
+            name="$1"
+            content_type="$2"
+            path="$3"
+            timeout 120s gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
+              --header "Content-Type: $content_type" \
+              --input "$path" \
+              --silent
+          }
+          upload_asset "orphanet.sqlite.gz" "application/gzip" "release-package/assets/orphanet.sqlite.gz"
+          upload_asset "orphanet.sqlite.gz.sha256" "text/plain" "release-package/assets/orphanet.sqlite.gz.sha256"
+          upload_asset "manifest.json" "application/json" "release-package/assets/manifest.json"
+          refetched_json="$RUNNER_TEMP/orphanet-refetched-release.json"
+          timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$refetched_json"
+          test "$(wc -c < "$refetched_json")" -le 1048576
+          python3 - "$refetched_json" "$release_id" "$TAG" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          release = json.load(open(sys.argv[1]))
+          if type(release.get("id")) is not int or release["id"] != int(sys.argv[2]):
+              raise SystemExit("release API identity changed unexpectedly")
+          if (
+              release.get("tag_name") != sys.argv[3]
+              or release.get("target_commitish") != sys.argv[4]
+              or release.get("draft") is not True
+          ):
+              raise SystemExit("created release is not the expected source-bound draft")
+          PY
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
       - name: Attest the exact release subject
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
@@ -257,6 +416,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build-and-verify.outputs.tag }}
+          RELEASE_ID: ${{ needs.build-and-verify.outputs.release_id || steps.create_draft.outputs.release_id }}
         run: |
           set -euo pipefail
           local_dir="$PWD/release-package/assets"
@@ -264,20 +424,51 @@ jobs:
           test -f "$verifier"
           test ! -L "$verifier"
           test "$(find "$local_dir" -maxdepth 1 -type f | wc -l)" -eq 3
+          release_id="$RELEASE_ID"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
+          python3 - "$release_id" <<'PY'
+          import sys
+          if int(sys.argv[1]) > 2**63 - 1:
+              raise SystemExit("release ID exceeds the safe bound")
+          PY
 
           verify_remote() {
             expected_draft="$1"
             remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
             release_json="${remote_dir}.json"
-            # Bind the checked draft to the exact API release before promotion.
-            api_url="$(timeout 30s gh release view "$TAG" --json apiUrl \
-              --repo "$GITHUB_REPOSITORY" --jq .apiUrl)"
-            api_prefix="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/"
-            case "$api_url" in
-              "$api_prefix"*) release_id="${api_url#"$api_prefix"}" ;;
-              *) echo "release API identity is outside the repository" >&2; return 1 ;;
-            esac
-            [[ "$release_id" =~ ^[1-9][0-9]*$ ]] || return 1
+            source_tag="${remote_dir}.tag.json"
+            set +e
+            timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$source_tag"
+            tag_status=$?
+            set -e
+            test "$(wc -c < "$source_tag")" -le 1048576
+            python3 - "$source_tag" "$GITHUB_SHA" "$expected_draft" "$tag_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[4])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              if sys.argv[3] == "true":
+                  print("source tag is absent before promotion")
+                  raise SystemExit(0)
+              raise SystemExit("published release requires an exact present source tag")
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("source tag does not resolve to the exact reviewed source")
+          PY
             timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$release_json"
             test "$(wc -c < "$release_json")" -le 1048576
             python3 - "$release_json" "$expected_draft" <<'PY'
@@ -285,10 +476,16 @@ jobs:
           import os
           import sys
           payload = json.load(open(sys.argv[1]))
+          if type(payload.get("id")) is not int or payload["id"] != int(os.environ["RELEASE_ID"]):
+              raise SystemExit("release API identity changed unexpectedly")
           if payload.get("tag_name") != os.environ.get("TAG"):
               raise SystemExit("release tag binding changed unexpectedly")
+          if payload.get("target_commitish") != os.environ.get("GITHUB_SHA"):
+              raise SystemExit("release source binding changed unexpectedly")
           if payload.get("draft") is not (sys.argv[2] == "true"):
               raise SystemExit("release draft state changed unexpectedly")
+          if sys.argv[2] == "false" and payload.get("immutable") is not True:
+              raise SystemExit("published release is not immutable")
           assets = payload.get("assets")
           expected = {"manifest.json", "orphanet.sqlite.gz", "orphanet.sqlite.gz.sha256"}
           if not isinstance(assets, list) or len(assets) != 3 or {a.get("name") for a in assets} != expected:
@@ -296,6 +493,7 @@ jobs:
           for asset in assets:
               if (
                   type(asset.get("id")) is not int
+                  or not 0 < asset["id"] <= 2**63 - 1
                   or type(asset.get("size")) is not int
                   or asset["size"] < 0
                   or asset["size"] > 4 * 1024**3
@@ -357,9 +555,80 @@ jobs:
               --source-ref "refs/heads/main"
           }
 
-          # GitHub has no conditional release-edit primitive. Recheck the API
-          # and every byte immediately before promotion, then fail closed if the
-          # post-promotion verification observes any unexpected mutation.
+          # Recheck the exact numeric API identity and every byte immediately
+          # before promotion, then promote and recheck that same identity.
           verify_remote true
-          timeout 30s gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+
+          ensure_source_tag() {
+            tag_probe="$RUNNER_TEMP/orphanet-promotion-tag-probe"
+            set +e
+            timeout 30s gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > "$tag_probe"
+            tag_status=$?
+            set -e
+            test "$(wc -c < "$tag_probe")" -le 1048576
+            tag_state="$(python3 - "$tag_probe" "$GITHUB_SHA" "$tag_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          command_status = int(sys.argv[3])
+          marker = b"\r\n\r\n"
+          header_end = raw.find(marker)
+          if header_end < 0:
+              marker = b"\n\n"
+              header_end = raw.find(marker)
+          if header_end < 0:
+              raise SystemExit("source tag probe has no HTTP response")
+          header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
+          status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
+          if status == 404 and command_status != 0:
+              print("absent")
+              raise SystemExit(0)
+          if status != 200 or command_status != 0:
+              raise SystemExit("source tag probe failed")
+          target = json.loads(raw[header_end + len(marker) :]).get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("source tag does not resolve to the exact reviewed source")
+          print("present")
+          PY
+            )"
+            if [ "$tag_state" = "absent" ]; then
+              created_tag="$RUNNER_TEMP/orphanet-created-source-tag.json"
+              timeout 30s gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+                -f "ref=refs/tags/$TAG" \
+                -f "sha=$GITHUB_SHA" > "$created_tag"
+              test "$(wc -c < "$created_tag")" -le 1048576
+              python3 - "$created_tag" "$TAG" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          payload = json.load(open(sys.argv[1]))
+          if not isinstance(payload, dict):
+              raise SystemExit("source tag creation response is not an object")
+          if payload.get("ref") != f"refs/tags/{sys.argv[2]}":
+              raise SystemExit("source tag creation response has an unexpected ref")
+          target = payload.get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[3]:
+              raise SystemExit("source tag creation response is not the exact lightweight commit ref")
+          PY
+            fi
+          }
+          ensure_source_tag
+          timeout 30s gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false \
+            > "$RUNNER_TEMP/orphanet-promotion.json"
+          test "$(wc -c < "$RUNNER_TEMP/orphanet-promotion.json")" -le 1048576
           verify_remote false
+          timeout 30s gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" \
+            > "$RUNNER_TEMP/orphanet-release-tag.json"
+          test "$(wc -c < "$RUNNER_TEMP/orphanet-release-tag.json")" -le 1048576
+          python3 - "$RUNNER_TEMP/orphanet-release-tag.json" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          tag = json.load(open(sys.argv[1]))
+          target = tag.get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("published tag does not resolve to the exact reviewed source")
+          PY
