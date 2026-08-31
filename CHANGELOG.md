@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Verify Orphanet release assets, source identity, schema, and counts before
+  treating an existing data tag as idempotent; differing or ambiguous releases
+  now fail closed without mutation.
+
 ## [0.4.4] - 2026-08-31
 
 ### Changed

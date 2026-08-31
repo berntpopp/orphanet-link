@@ -65,33 +65,14 @@ jobs:
           echo "Orphanet version: $VERSION  ->  tag: $TAG"
 
       # -----------------------------------------------------------------------
-      # 3. Idempotency guard — skip publish if this release tag already exists
-      # -----------------------------------------------------------------------
-      - name: Check whether release already exists
-        id: release_check
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "${{ steps.meta.outputs.tag }}" --json tagName -q '.tagName' 2>/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${{ steps.meta.outputs.tag }} already exists — skipping publish."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Release ${{ steps.meta.outputs.tag }} does not exist — will publish."
-          fi
-
-      # -----------------------------------------------------------------------
-      # 4. Package assets (only when release does not exist yet)
+      # 3. Package deterministic assets before checking for a collision
       # -----------------------------------------------------------------------
       - name: Compress database
-        if: steps.release_check.outputs.exists != 'true'
         run: |
-          gzip -kf data/orphanet.sqlite
+          gzip -n -kf data/orphanet.sqlite
           ( cd data && sha256sum orphanet.sqlite.gz > orphanet.sqlite.gz.sha256 )
 
       - name: Write manifest.json
-        if: steps.release_check.outputs.exists != 'true'
         run: |
           uv run python - <<'EOF'
           import json, sqlite3
@@ -121,10 +102,96 @@ jobs:
           EOF
 
       # -----------------------------------------------------------------------
-      # 5. Publish GitHub Release (only when release does not exist yet)
+      # 4. Verify exact identity before allowing any release mutation
       # -----------------------------------------------------------------------
+      - name: Prepare exact release assets
+        env:
+          CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-current-release
+        run: |
+          mkdir "$CURRENT_RELEASE_DIR"
+          cp -- data/orphanet.sqlite.gz data/orphanet.sqlite.gz.sha256 data/manifest.json \
+            "$CURRENT_RELEASE_DIR/"
+
+      - name: Verify existing release identity
+        id: release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-current-release
+        run: |
+          set -euo pipefail
+          response="$RUNNER_TEMP/orphanet-release-response"
+          existing_dir="$RUNNER_TEMP/orphanet-existing-release"
+          uv run python - "$CURRENT_RELEASE_DIR" "$TAG" <<'PY'
+          import sys
+          from pathlib import Path
+
+          from orphanet_link.ingest.release_identity import read_release_identity
+
+          print(read_release_identity(Path(sys.argv[1]), sys.argv[2]))
+          PY
+          if gh api --include "/repos/$GITHUB_REPOSITORY/releases/tags/$TAG" >"$response"; then
+            status="$(sed -n '1s#^HTTP/[^ ]* \([0-9][0-9][0-9]\).*#\1#p' "$response")"
+            test "$status" = 200
+            body="$(sed -n '/^{/,$p' "$response")"
+            is_draft="$(printf '%s' "$body" | jq -er 'if (.draft | type) == "boolean" then .draft else error("invalid draft state") end')"
+            mkdir "$existing_dir"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern manifest.json \
+              --pattern orphanet.sqlite.gz \
+              --pattern orphanet.sqlite.gz.sha256 \
+              --dir "$existing_dir"
+            state="$(uv run python - "$CURRENT_RELEASE_DIR" "$existing_dir" "$TAG" "$is_draft" <<'PY'
+          import sys
+          from pathlib import Path
+
+          from orphanet_link.ingest.release_identity import verify_release_identity
+
+          print(verify_release_identity(
+              Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], is_draft=sys.argv[4] == "true"
+          ))
+          PY
+            )"
+            case "$state" in
+              published_noop|draft_publish_existing)
+                echo "state=$state" >> "$GITHUB_OUTPUT"
+                echo "Release $TAG has identical verified assets: $state."
+                ;;
+              collision)
+                echo "Release $TAG exists but its verified identity differs." >&2
+                echo "collision" >&2
+                exit 1
+                ;;
+              *)
+                echo "Unexpected release identity state: $state" >&2
+                echo "collision" >&2
+                exit 1
+                ;;
+            esac
+          else
+            status="$(sed -n '1s#^HTTP/[^ ]* \([0-9][0-9][0-9]\).*#\1#p' "$response")"
+            if test "$status" = 404; then
+              echo "state=create" >> "$GITHUB_OUTPUT"
+              echo "Release $TAG does not exist — will publish."
+            else
+              echo "Unable to determine release state (HTTP ${status:-unknown}); refusing mutation." >&2
+              echo "collision" >&2
+              exit 1
+            fi
+          fi
+
+      # -----------------------------------------------------------------------
+      # 5. Publish only after a verified create or draft transition
+      # -----------------------------------------------------------------------
+      - name: Publish existing draft release
+        if: steps.release_state.outputs.state == 'draft_publish_existing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+
       - name: Publish GitHub Release
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.release_state.outputs.state == 'create'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}

@@ -98,8 +98,10 @@ to GitHub Releases:
   check catches a new release within a week), `workflow_dispatch`, and any push
   touching `orphanet_link/ingest/**`.
 - **Steps:** build → read `meta.orphanet_version` → compute the tag
-  `data-<version>` → exit early if a Release for that tag already exists
-  (idempotent) → gzip → write `.sha256` + `manifest.json` → create the Release.
+  `data-<version>` → gzip → write `.sha256` + `manifest.json` → download and
+  verify any existing release's exact assets, source version, schema, and counts
+  → no-op only for an identical published release, promote an identical draft,
+  or create a new Release. Any mismatch or ambiguous API result fails closed.
 
 **Runtime (`services/data_resolver.py`)**, on local/development server start with
 `AUTO_BOOTSTRAP=true`:

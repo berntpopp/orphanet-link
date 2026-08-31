@@ -1,0 +1,208 @@
+"""Bounded identity checks for immutable Orphanet data releases."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, cast
+
+MAX_METADATA_BYTES = 1 << 20
+MAX_ASSET_BYTES = 4 * 1024**3
+ASSET_NAME = "orphanet.sqlite.gz"
+CHECKSUM_NAME = f"{ASSET_NAME}.sha256"
+RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, "manifest.json"})
+_VERSION_TAG = re.compile(r"^data-[0-9A-Za-z][0-9A-Za-z.-]*$")
+_COUNT_FIELDS = (
+    "disorder_count",
+    "xref_count",
+    "gene_count",
+    "phenotype_count",
+    "prevalence_count",
+)
+_MANIFEST_FIELDS = frozenset(
+    {"version", "orphanet_date", "schema_version", *_COUNT_FIELDS, "asset"}
+)
+_OPTIONAL_MANIFEST_FIELDS = frozenset({"build_utc"})
+
+ReleaseState = Literal["create", "published_noop", "draft_publish_existing", "collision"]
+
+
+class ReleaseIdentityError(ValueError):
+    """A release cannot be treated as an exact immutable identity."""
+
+
+@dataclass(frozen=True)
+class ReleaseIdentity:
+    """Stable source, asset, schema, and count identity for one release."""
+
+    tag: str
+    version: str
+    orphanet_date: str
+    schema_version: int
+    asset: str
+    bundle_sha256: str
+    bundle_size: int
+    counts: tuple[tuple[str, int], ...]
+
+
+def _read_metadata(path: Path) -> bytes:
+    try:
+        info = path.lstat()
+    except FileNotFoundError as error:
+        raise ReleaseIdentityError("exact release assets are required") from error
+    if not path.is_file() or path.is_symlink() or info.st_size > MAX_METADATA_BYTES:
+        raise ReleaseIdentityError("exact release assets are required")
+    try:
+        value = path.read_bytes()
+    except OSError as error:
+        raise ReleaseIdentityError("exact release assets are required") from error
+    if len(value) > MAX_METADATA_BYTES:
+        raise ReleaseIdentityError("release metadata exceeds the 1 MiB bound")
+    return value
+
+
+def _hash_asset(path: Path) -> tuple[str, int]:
+    try:
+        info = path.lstat()
+    except FileNotFoundError as error:
+        raise ReleaseIdentityError("exact release assets are required") from error
+    if not path.is_file() or path.is_symlink() or info.st_size > MAX_ASSET_BYTES:
+        raise ReleaseIdentityError("release asset is missing, unsafe, or oversized")
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                size += len(chunk)
+                if size > MAX_ASSET_BYTES:
+                    raise ReleaseIdentityError("release asset exceeds the size bound")
+                digest.update(chunk)
+    except OSError as error:
+        raise ReleaseIdentityError("release asset is missing or unreadable") from error
+    return digest.hexdigest(), size
+
+
+def _manifest(value: bytes) -> Mapping[str, object]:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ReleaseIdentityError("manifest.json is invalid JSON") from error
+    if not isinstance(parsed, dict):
+        raise ReleaseIdentityError("manifest.json must be an object")
+    keys = set(parsed)
+    if keys - (_MANIFEST_FIELDS | _OPTIONAL_MANIFEST_FIELDS) or not keys >= _MANIFEST_FIELDS:
+        raise ReleaseIdentityError("manifest.json has an incomplete or unexpected shape")
+    for key in ("version", "orphanet_date", "asset"):
+        if type(parsed[key]) is not str or not parsed[key]:
+            raise ReleaseIdentityError(f"manifest.json has an invalid {key}")
+    if parsed["asset"] != ASSET_NAME:
+        raise ReleaseIdentityError("manifest.json names an unexpected asset")
+    if type(parsed["schema_version"]) is not int or parsed["schema_version"] < 1:
+        raise ReleaseIdentityError("manifest.json has an invalid schema_version")
+    for key in _COUNT_FIELDS:
+        if type(parsed[key]) is not int or parsed[key] < 0:
+            raise ReleaseIdentityError(f"manifest.json has an invalid {key}")
+    if "build_utc" in parsed and (type(parsed["build_utc"]) is not str or not parsed["build_utc"]):
+        raise ReleaseIdentityError("manifest.json has an invalid build_utc")
+    return parsed
+
+
+def _checksum(value: bytes, digest: str) -> None:
+    try:
+        text = value.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise ReleaseIdentityError("checksum asset is not ASCII") from error
+    lines = text.splitlines()
+    if len(lines) != 1:
+        raise ReleaseIdentityError("checksum asset must contain exactly one line")
+    parts = lines[0].split("  ")
+    if len(parts) != 2 or parts[1] != ASSET_NAME or parts[0] != digest:
+        raise ReleaseIdentityError("checksum asset does not match the release asset")
+    if len(parts[0]) != 64 or any(char not in "0123456789abcdef" for char in parts[0]):
+        raise ReleaseIdentityError("checksum asset contains an invalid digest")
+
+
+def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
+    """Read and verify exactly three release assets with bounded metadata."""
+    if not _VERSION_TAG.fullmatch(tag):
+        raise ReleaseIdentityError("release tag is not a valid data tag")
+    if not release_dir.is_dir() or release_dir.is_symlink():
+        raise ReleaseIdentityError("release directory is missing or unsafe")
+    try:
+        names = {path.name for path in release_dir.iterdir()}
+    except OSError as error:
+        raise ReleaseIdentityError("exact release assets are required") from error
+    if names != RELEASE_ASSETS:
+        raise ReleaseIdentityError("exact release assets are required")
+    manifest = _manifest(_read_metadata(release_dir / "manifest.json"))
+    digest, size = _hash_asset(release_dir / ASSET_NAME)
+    _checksum(_read_metadata(release_dir / CHECKSUM_NAME), digest)
+    version = str(manifest["version"])
+    if _tag_for_version(version) != tag:
+        raise ReleaseIdentityError("manifest version does not match release tag")
+    return ReleaseIdentity(
+        tag=tag,
+        version=version,
+        orphanet_date=str(manifest["orphanet_date"]),
+        schema_version=cast(int, manifest["schema_version"]),
+        asset=ASSET_NAME,
+        bundle_sha256=digest,
+        bundle_size=size,
+        counts=tuple((key, cast(int, manifest[key])) for key in _COUNT_FIELDS),
+    )
+
+
+def _tag_for_version(version: str) -> str:
+    """Apply the workflow's stable source-version-to-tag normalization."""
+    slug = re.sub(r"[^0-9A-Za-z.]+", "-", version).strip("-")
+    slug = re.sub(r"-+", "-", slug)
+    if not slug:
+        raise ReleaseIdentityError("source version cannot produce a release tag")
+    return f"data-{slug}"
+
+
+def classify_release(
+    current: Mapping[str, object],
+    existing: Mapping[str, object] | None,
+    *,
+    is_draft: bool,
+) -> ReleaseState:
+    """Return a typed mutation state, rejecting incomplete or differing identities."""
+    if existing is None:
+        return "create"
+    required = {"tag", "assets", "bundle_sha256", "bundle_size", "manifest"}
+    if not required <= set(existing):
+        raise ReleaseIdentityError("exact release assets and identity are required")
+    if current != existing:
+        return "collision"
+    return "draft_publish_existing" if is_draft else "published_noop"
+
+
+def compare_release_directories(
+    current_dir: Path,
+    existing_dir: Path,
+    tag: str,
+    *,
+    is_draft: bool,
+) -> ReleaseState:
+    """Verify both exact asset directories, then classify their identity."""
+    current = read_release_identity(current_dir, tag)
+    existing = read_release_identity(existing_dir, tag)
+    if current != existing:
+        return "collision"
+    return "draft_publish_existing" if is_draft else "published_noop"
+
+
+def verify_release_identity(
+    current_dir: Path,
+    existing_dir: Path,
+    tag: str,
+    *,
+    is_draft: bool,
+) -> ReleaseState:
+    """Verify an existing release before any release mutation is permitted."""
+    return compare_release_directories(current_dir, existing_dir, tag, is_draft=is_draft)
