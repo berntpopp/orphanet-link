@@ -149,7 +149,7 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     digest, size = _hash_asset(release_dir / ASSET_NAME)
     _checksum(_read_metadata(release_dir / CHECKSUM_NAME), digest)
     version = str(manifest["version"])
-    if release_tag(version, str(manifest["orphanet_date"])) != tag:
+    if not _tag_matches_manifest(version, str(manifest["orphanet_date"]), tag):
         raise ReleaseIdentityError("manifest version does not match release tag")
     return ReleaseIdentity(
         tag=tag,
@@ -163,7 +163,12 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     )
 
 
-def release_tag(version: str, orphanet_date: str) -> str:
+def release_tag(
+    version: str,
+    orphanet_date: str,
+    *,
+    collision_revision: int | None = None,
+) -> str:
     """Return a readable tag bound to the upstream dataset revision."""
     slug = re.sub(r"[^0-9A-Za-z.]+", "-", version).strip("-")
     slug = re.sub(r"-+", "-", slug)
@@ -173,7 +178,23 @@ def release_tag(version: str, orphanet_date: str) -> str:
         revision = datetime.strptime(orphanet_date, "%Y-%m-%d %H:%M:%S")
     except ValueError as error:
         raise ReleaseIdentityError("manifest has an invalid orphanet_date") from error
-    return f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
+    tag = f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
+    if collision_revision is None:
+        return tag
+    if type(collision_revision) is not int or collision_revision < 2:
+        raise ReleaseIdentityError("collision revision must be an integer of at least 2")
+    return f"{tag}-r{collision_revision}"
+
+
+def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
+    """Accept the base identity or an explicit collision revision of at least two."""
+    base = release_tag(version, orphanet_date)
+    if tag == base:
+        return True
+    suffix = tag.removeprefix(f"{base}-r")
+    return (
+        tag.startswith(f"{base}-r") and re.fullmatch(r"(?:[2-9]|[1-9][0-9]+)", suffix) is not None
+    )
 
 
 def classify_release(
@@ -219,7 +240,7 @@ def _mapping_identity(value: Mapping[str, object]) -> ReleaseIdentity:
         raise ReleaseIdentityError("release identity has an invalid manifest")
     parsed = _validate_manifest(manifest)
     version = cast(str, parsed["version"])
-    if release_tag(version, cast(str, parsed["orphanet_date"])) != tag:
+    if not _tag_matches_manifest(version, cast(str, parsed["orphanet_date"]), tag):
         raise ReleaseIdentityError("release identity manifest version does not match tag")
     return ReleaseIdentity(
         tag=tag,

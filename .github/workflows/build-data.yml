@@ -26,6 +26,12 @@ on:
 
 permissions: {}
 
+# GitHub permits multiple draft releases with one tag. Serialize every run for
+# a ref so two scheduled/manual publishers cannot create competing drafts.
+concurrency:
+  group: orphanet-data-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-verify:
     name: Build SQLite and verify release identity
@@ -69,7 +75,9 @@ jobs:
               version, orphanet_date = connection.execute(
                   "SELECT orphanet_version, orphanet_date FROM meta WHERE id = 1"
               ).fetchone()
-          tag = release_tag(version, orphanet_date)
+          # The base tag has two retained collision drafts from the failed
+          # 2026-08-31 publication. Preserve both and advance explicitly.
+          tag = release_tag(version, orphanet_date, collision_revision=2)
           with Path(sys.argv[1]).open("a", encoding="utf-8") as output:
               print(f"tag={tag}", file=output)
               print(f"version={version}", file=output)
@@ -232,6 +240,7 @@ jobs:
           python-version: "3.14"
 
       - name: Atomically create a new draft
+        id: create_draft
         if: needs.build-and-verify.outputs.state == 'create'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,6 +248,43 @@ jobs:
           VERSION: ${{ needs.build-and-verify.outputs.version }}
         run: |
           set -euo pipefail
+          inventory_tag() {
+            output="$1"
+            : > "$output"
+            complete=false
+            for page in $(seq 1 10); do
+              page_json="$RUNNER_TEMP/orphanet-release-page-$page.json"
+              timeout 30s gh api \
+                "repos/$GITHUB_REPOSITORY/releases?per_page=100&page=$page" > "$page_json"
+              test "$(wc -c < "$page_json")" -le 8388608
+              count="$(python3 - "$page_json" "$TAG" "$output" <<'PY'
+          import json
+          import sys
+
+          page = json.load(open(sys.argv[1]))
+          if not isinstance(page, list) or len(page) > 100:
+              raise SystemExit("release inventory page is invalid")
+          with open(sys.argv[3], "a", encoding="utf-8") as matches:
+              for release in page:
+                  if not isinstance(release, dict):
+                      raise SystemExit("release inventory item is invalid")
+                  if release.get("tag_name") == sys.argv[2]:
+                      print(json.dumps(release, separators=(",", ":")), file=matches)
+          print(len(page))
+          PY
+              )"
+              if [ "$count" -lt 100 ]; then complete=true; break; fi
+            done
+            test "$complete" = true
+          }
+
+          before="$RUNNER_TEMP/orphanet-release-before.jsonl"
+          after="$RUNNER_TEMP/orphanet-release-after.jsonl"
+          inventory_tag "$before"
+          if [ -s "$before" ]; then
+            echo "writer inventory found an existing exact-tag release before create" >&2
+            exit 1
+          fi
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
@@ -248,6 +294,80 @@ jobs:
             release-package/assets/orphanet.sqlite.gz \
             release-package/assets/orphanet.sqlite.gz.sha256 \
             release-package/assets/manifest.json
+          inventory_tag "$after"
+          release_id="$(python3 - "$after" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          lines = [line for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+          if len(lines) != 1:
+              raise SystemExit("writer inventory did not find exactly one created release")
+          release = json.loads(lines[0])
+          release_id = release.get("id")
+          if type(release_id) is not int or release_id < 1:
+              raise SystemExit("created release lacks a numeric API identity")
+          if release.get("draft") is not True or release.get("target_commitish") != sys.argv[2]:
+              raise SystemExit("created release is not the expected source-bound draft")
+          assets = release.get("assets")
+          expected = {"manifest.json", "orphanet.sqlite.gz", "orphanet.sqlite.gz.sha256"}
+          if not isinstance(assets, list) or len(assets) != 3 or {a.get("name") for a in assets} != expected:
+              raise SystemExit("created release has an unexpected asset inventory")
+          print(release_id)
+          PY
+          )"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Bind existing exact draft ID
+        id: bind_existing
+        if: needs.build-and-verify.outputs.state == 'draft_publish_existing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-and-verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          matches="$RUNNER_TEMP/orphanet-existing-draft.jsonl"
+          : > "$matches"
+          complete=false
+          for page in $(seq 1 10); do
+            page_json="$RUNNER_TEMP/orphanet-existing-page-$page.json"
+            timeout 30s gh api \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100&page=$page" > "$page_json"
+            test "$(wc -c < "$page_json")" -le 8388608
+            count="$(python3 - "$page_json" "$TAG" "$matches" <<'PY'
+          import json
+          import sys
+
+          page = json.load(open(sys.argv[1]))
+          if not isinstance(page, list) or len(page) > 100:
+              raise SystemExit("release inventory page is invalid")
+          with open(sys.argv[3], "a", encoding="utf-8") as output:
+              for release in page:
+                  if not isinstance(release, dict):
+                      raise SystemExit("release inventory item is invalid")
+                  if release.get("tag_name") == sys.argv[2]:
+                      print(json.dumps(release, separators=(",", ":")), file=output)
+          print(len(page))
+          PY
+            )"
+            if [ "$count" -lt 100 ]; then complete=true; break; fi
+          done
+          test "$complete" = true
+          release_id="$(python3 - "$matches" <<'PY'
+          import json
+          import sys
+
+          lines = [line for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+          if len(lines) != 1:
+              raise SystemExit("writer inventory did not find exactly one existing draft")
+          release = json.loads(lines[0])
+          release_id = release.get("id")
+          if type(release_id) is not int or release_id < 1 or release.get("draft") is not True:
+              raise SystemExit("existing release is not one exact numeric draft")
+          print(release_id)
+          PY
+          )"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
       - name: Attest the exact release subject
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
@@ -257,6 +377,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build-and-verify.outputs.tag }}
+          RELEASE_ID: ${{ steps.create_draft.outputs.release_id || steps.bind_existing.outputs.release_id }}
         run: |
           set -euo pipefail
           local_dir="$PWD/release-package/assets"
@@ -264,20 +385,13 @@ jobs:
           test -f "$verifier"
           test ! -L "$verifier"
           test "$(find "$local_dir" -maxdepth 1 -type f | wc -l)" -eq 3
+          release_id="$RELEASE_ID"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
 
           verify_remote() {
             expected_draft="$1"
             remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
             release_json="${remote_dir}.json"
-            # Bind the checked draft to the exact API release before promotion.
-            api_url="$(timeout 30s gh release view "$TAG" --json apiUrl \
-              --repo "$GITHUB_REPOSITORY" --jq .apiUrl)"
-            api_prefix="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/"
-            case "$api_url" in
-              "$api_prefix"*) release_id="${api_url#"$api_prefix"}" ;;
-              *) echo "release API identity is outside the repository" >&2; return 1 ;;
-            esac
-            [[ "$release_id" =~ ^[1-9][0-9]*$ ]] || return 1
             timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$release_json"
             test "$(wc -c < "$release_json")" -le 1048576
             python3 - "$release_json" "$expected_draft" <<'PY'
@@ -285,10 +399,16 @@ jobs:
           import os
           import sys
           payload = json.load(open(sys.argv[1]))
+          if payload.get("id") != int(os.environ["RELEASE_ID"]):
+              raise SystemExit("release API identity changed unexpectedly")
           if payload.get("tag_name") != os.environ.get("TAG"):
               raise SystemExit("release tag binding changed unexpectedly")
+          if payload.get("target_commitish") != os.environ.get("GITHUB_SHA"):
+              raise SystemExit("release source binding changed unexpectedly")
           if payload.get("draft") is not (sys.argv[2] == "true"):
               raise SystemExit("release draft state changed unexpectedly")
+          if sys.argv[2] == "false" and payload.get("immutable") is not True:
+              raise SystemExit("published release is not immutable")
           assets = payload.get("assets")
           expected = {"manifest.json", "orphanet.sqlite.gz", "orphanet.sqlite.gz.sha256"}
           if not isinstance(assets, list) or len(assets) != 3 or {a.get("name") for a in assets} != expected:
@@ -357,9 +477,23 @@ jobs:
               --source-ref "refs/heads/main"
           }
 
-          # GitHub has no conditional release-edit primitive. Recheck the API
-          # and every byte immediately before promotion, then fail closed if the
-          # post-promotion verification observes any unexpected mutation.
+          # Recheck the exact numeric API identity and every byte immediately
+          # before promotion, then promote and recheck that same identity.
           verify_remote true
-          timeout 30s gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+          timeout 30s gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false \
+            > "$RUNNER_TEMP/orphanet-promotion.json"
+          test "$(wc -c < "$RUNNER_TEMP/orphanet-promotion.json")" -le 1048576
           verify_remote false
+          timeout 30s gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" \
+            > "$RUNNER_TEMP/orphanet-release-tag.json"
+          test "$(wc -c < "$RUNNER_TEMP/orphanet-release-tag.json")" -le 1048576
+          python3 - "$RUNNER_TEMP/orphanet-release-tag.json" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          tag = json.load(open(sys.argv[1]))
+          target = tag.get("object")
+          if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
+              raise SystemExit("published tag does not resolve to the exact reviewed source")
+          PY

@@ -45,6 +45,7 @@ def test_release_tag_is_qualified_by_the_exact_dataset_revision() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "release_tag" in workflow_text
     assert "orphanet_date" in workflow_text
+    assert "collision_revision=2" in workflow_text
     assert 'TAG="data-$SLUG"' not in workflow_text
 
 
@@ -108,6 +109,10 @@ def test_every_attestation_check_pins_the_reviewed_workflow_and_source_ref() -> 
 def test_build_and_publisher_permissions_are_separated() -> None:
     workflow = _workflow()
     assert workflow["permissions"] == {}
+    assert workflow["concurrency"] == {
+        "group": "orphanet-data-${{ github.ref }}",
+        "cancel-in-progress": False,
+    }
     jobs = workflow["jobs"]
     assert jobs["build-and-verify"]["permissions"] == {"contents": "read"}  # type: ignore[index]
     assert jobs["publish"]["permissions"] == {  # type: ignore[index]
@@ -118,10 +123,21 @@ def test_build_and_publisher_permissions_are_separated() -> None:
 
 
 def test_create_is_atomic_and_does_not_use_an_overwriting_action() -> None:
+    workflow = _workflow()
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "softprops/action-gh-release" not in workflow_text
     assert "gh release create" in workflow_text
     assert "--clobber" not in workflow_text
+    publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    create = next(
+        step for step in publish_steps if step.get("name") == "Atomically create a new draft"
+    )
+    assert create["id"] == "create_draft"
+    script = create["run"]
+    assert "per_page=100" in script
+    assert "seq 1 10" in script
+    assert script.index("inventory_tag") < script.index("gh release create")
+    assert "release_id=$release_id" in script
 
 
 def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish() -> None:
@@ -140,8 +156,13 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
-    assert 'gh release view "$TAG" --json apiUrl' in script
+    assert 'gh release view "$TAG"' not in script
+    assert 'gh release edit "$TAG"' not in script
+    assert "RELEASE_ID" in script
     assert "releases/$release_id" in script
+    patch = script.index("gh api --method PATCH")
+    assert script.index('"repos/$GITHUB_REPOSITORY/releases/$release_id"', patch) > patch
+    assert "git/ref/tags/$TAG" in script
     assert "orphanet-release-assets" in str(publish_steps)
 
 
