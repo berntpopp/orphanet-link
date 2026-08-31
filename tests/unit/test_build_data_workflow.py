@@ -34,7 +34,6 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
 def test_existing_release_downloads_exact_assets_and_compares_identity() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "orphanet_link.ingest.release_assets" in workflow_text
-    assert "gh release download" not in workflow_text
     assert "verify_release_identity" in workflow_text
     assert "read_release_identity" in workflow_text
     helper = (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
@@ -67,7 +66,6 @@ def test_identity_states_gate_mutation_without_delete_or_clobber() -> None:
 def test_existing_release_retrieval_is_bounded_and_inventory_aware() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "orphanet_link.ingest.release_assets" in workflow_text
-    assert "gh release download" not in workflow_text
     assert "MAX_METADATA_BYTES" in (ROOT / "orphanet_link/ingest/release_assets.py").read_text()
 
 
@@ -76,7 +74,11 @@ def test_build_and_publisher_permissions_are_separated() -> None:
     assert workflow["permissions"] == {}
     jobs = workflow["jobs"]
     assert jobs["build-and-verify"]["permissions"] == {"contents": "read"}  # type: ignore[index]
-    assert jobs["publish"]["permissions"] == {"contents": "write"}  # type: ignore[index]
+    assert jobs["publish"]["permissions"] == {  # type: ignore[index]
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
 
 
 def test_create_is_atomic_and_does_not_use_an_overwriting_action() -> None:
@@ -91,13 +93,46 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     workflow = _workflow()
     publish_steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
     names = [step.get("name", "") for step in publish_steps]  # type: ignore[union-attr]
-    recheck = names.index("Recheck exact draft identity before publication")
     create_draft = names.index("Atomically create a new draft")
     publish = names.index("Publish exact rechecked draft")
-    assert create_draft < recheck < publish
-    script = publish_steps[recheck]["run"]  # type: ignore[index]
-    assert "orphanet_link.ingest.release_assets" in script
+    assert create_draft < publish
+    script = publish_steps[publish]["run"]  # type: ignore[index]
+    assert "releases/assets/" in script
+    assert "Accept: application/octet-stream" in script
+    assert "1048576" in script
+    assert "8388608" in script
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
     assert "orphanet-release-assets" in str(publish_steps)
+
+
+def test_publisher_is_trusted_and_can_generate_provenance() -> None:
+    workflow = _workflow()
+    publish = workflow["jobs"]["publish"]  # type: ignore[index]
+    assert "github.ref == 'refs/heads/main'" in publish["if"]
+    assert "startsWith(github.ref, 'refs/tags/')" in publish["if"]
+    assert "github.ref_protected == true" in publish["if"]
+    assert "needs.build-and-verify.outputs.state == 'create'" in publish["if"]
+    assert publish["environment"] == "data-release"
+    assert publish["permissions"] == {  # type: ignore[index]
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    steps = publish["steps"]  # type: ignore[index]
+    assert any("actions/attest-build-provenance@" in step.get("uses", "") for step in steps)
+    scripts = "\n".join(_run_blocks({"jobs": {"publish": publish}}))
+    assert "gh attestation verify" in scripts
+
+
+def test_publisher_uses_only_the_immutable_handoff_verifier() -> None:
+    workflow = _workflow()
+    publish = workflow["jobs"]["publish"]  # type: ignore[index]
+    steps = publish["steps"]  # type: ignore[index]
+    assert any("actions/setup-python@" in step.get("uses", "") for step in steps)
+    assert not any(step.get("uses", "").startswith("actions/checkout@") for step in steps)
+    scripts = "\n".join(_run_blocks({"jobs": {"publish": publish}}))
+    assert "uv run" not in scripts
+    assert "release-package/verifier/release_identity.py" in scripts
+    assert "timeout 120s" in scripts

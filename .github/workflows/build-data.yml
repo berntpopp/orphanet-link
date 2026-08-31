@@ -111,18 +111,21 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Prepare exact release assets
         env:
-          CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-current-release
+          HANDOFF_DIR: ${{ runner.temp }}/orphanet-release-handoff
         run: |
-          mkdir "$CURRENT_RELEASE_DIR"
+          mkdir -p "$HANDOFF_DIR/assets" "$HANDOFF_DIR/verifier"
           cp -- data/orphanet.sqlite.gz data/orphanet.sqlite.gz.sha256 data/manifest.json \
-            "$CURRENT_RELEASE_DIR/"
+            "$HANDOFF_DIR/assets/"
+          # The publisher executes only this reviewed, stdlib-only verifier from
+          # the immutable build artifact; it never checks out branch-controlled code.
+          cp -- orphanet_link/ingest/release_identity.py "$HANDOFF_DIR/verifier/"
 
       - name: Verify existing release identity
         id: release_state
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.meta.outputs.tag }}
-          CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-current-release
+          CURRENT_RELEASE_DIR: ${{ runner.temp }}/orphanet-release-handoff/assets
         run: |
           set -euo pipefail
           existing_dir="$RUNNER_TEMP/orphanet-existing-release"
@@ -182,23 +185,32 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: orphanet-release-assets
-          path: ${{ runner.temp }}/orphanet-current-release
+          path: ${{ runner.temp }}/orphanet-release-handoff
           if-no-files-found: error
 
   publish:
     name: Publish only a verified draft or create package
     needs: build-and-verify
-    if: needs.build-and-verify.outputs.state == 'draft_publish_existing' || needs.build-and-verify.outputs.state == 'create'
+    # Only a protected reviewed main/tag ref may receive contents:write.
+    if: github.ref_protected == true && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && (needs.build-and-verify.outputs.state == 'draft_publish_existing' || needs.build-and-verify.outputs.state == 'create')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: data-release
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Download exact verified release package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: orphanet-release-assets
-          path: release-assets
+          path: release-package
+
+      - name: Setup pinned Python for the handoff verifier
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.14"
 
       - name: Atomically create a new draft
         if: needs.build-and-verify.outputs.state == 'create'
@@ -214,41 +226,111 @@ jobs:
             --title "Orphanet data $VERSION" \
             --notes "Prebuilt Orphanet SQLite database. Data: Orphadata CC BY 4.0, © INSERM." \
             --draft \
-            release-assets/orphanet.sqlite.gz \
-            release-assets/orphanet.sqlite.gz.sha256 \
-            release-assets/manifest.json
-      - name: Recheck exact draft identity before publication
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.build-and-verify.outputs.tag }}
-        run: |
-          set -euo pipefail
-          remote_dir="$RUNNER_TEMP/orphanet-publisher-recheck"
-          state="$(uv run python -m orphanet_link.ingest.release_assets \
-            "$GITHUB_REPOSITORY" "$TAG" "$remote_dir")"
-          test "$state" = draft
-          verification="$(uv run python - release-assets "$remote_dir" "$TAG" <<'PY'
-          import sys
-          from pathlib import Path
-
-          from orphanet_link.ingest.release_identity import (
-              read_release_identity,
-              verify_release_identity,
-          )
-
-          expected = read_release_identity(Path(sys.argv[1]), sys.argv[3])
-          state = verify_release_identity(
-              Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], is_draft=True
-          )
-          if state != "draft_publish_existing":
-              raise SystemExit(f"unsafe draft state: {state}")
-          print(expected)
-          PY
-          )"
-          test -n "$verification"
+            release-package/assets/orphanet.sqlite.gz \
+            release-package/assets/orphanet.sqlite.gz.sha256 \
+            release-package/assets/manifest.json
+      - name: Attest the exact release subject
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409a5 # v2.2.0
+        with:
+          subject-path: release-package/assets/orphanet.sqlite.gz
 
       - name: Publish exact rechecked draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build-and-verify.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+        run: |
+          set -euo pipefail
+          local_dir="$PWD/release-package/assets"
+          verifier="$PWD/release-package/verifier/release_identity.py"
+          test -f "$verifier"
+          test ! -L "$verifier"
+          test "$(find "$local_dir" -maxdepth 1 -type f | wc -l)" -eq 3
+
+          verify_remote() {
+            expected_draft="$1"
+            remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
+            release_json="${remote_dir}.json"
+            # Bind the checked draft to the exact API release before promotion.
+            timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_json"
+            test "$(wc -c < "$release_json")" -le 1048576
+            python3 - "$release_json" "$expected_draft" <<'PY'
+          import json
+          import os
+          import sys
+          payload = json.load(open(sys.argv[1]))
+          if payload.get("tag_name") != os.environ.get("TAG"):
+              raise SystemExit("release tag binding changed unexpectedly")
+          if payload.get("draft") is not (sys.argv[2] == "true"):
+              raise SystemExit("release draft state changed unexpectedly")
+          assets = payload.get("assets")
+          expected = {"manifest.json", "orphanet.sqlite.gz", "orphanet.sqlite.gz.sha256"}
+          if not isinstance(assets, list) or len(assets) != 3 or {a.get("name") for a in assets} != expected:
+              raise SystemExit("release asset inventory is not exactly the three-asset contract")
+          for asset in assets:
+              if (
+                  type(asset.get("id")) is not int
+                  or type(asset.get("size")) is not int
+                  or asset["size"] < 0
+                  or asset["size"] > 4 * 1024**3
+                  or not isinstance(asset.get("digest"), str)
+              ):
+                  raise SystemExit("release asset lacks immutable id/digest metadata")
+              if not asset["digest"].startswith("sha256:"):
+                  raise SystemExit("release asset digest is not sha256")
+          PY
+            ulimit -f 8388608
+            for asset in manifest.json orphanet.sqlite.gz orphanet.sqlite.gz.sha256; do
+              asset_id="$(python3 - "$release_json" "$asset" <<'PY'
+          import json, sys
+          for item in json.load(open(sys.argv[1]))["assets"]:
+              if item["name"] == sys.argv[2]:
+                  print(item["id"])
+                  break
+          else:
+              raise SystemExit("asset ID is missing")
+          PY
+              )"
+              test -n "$asset_id"
+              timeout 120s gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+                --header "Accept: application/octet-stream" > "$remote_dir/$asset"
+            done
+            test "$(find "$remote_dir" -maxdepth 1 -type f | wc -l)" -eq 3
+            python3 - "$release_json" "$remote_dir" "$local_dir" "$TAG" "$verifier" "$expected_draft" <<'PY'
+          import hashlib
+          import json
+          import runpy
+          import sys
+          from pathlib import Path
+
+          release_json, remote, local, tag, verifier, expected_draft = sys.argv[1:]
+          module = runpy.run_path(verifier)
+          local_identity = module["read_release_identity"](Path(local), tag)
+          state = module["verify_release_identity"](
+              Path(local), Path(remote), tag, is_draft=(expected_draft == "true")
+          )
+          if state not in {"draft_publish_existing", "published_noop"}:
+              raise SystemExit("remote draft identity differs from the sealed handoff")
+          payload = json.load(open(release_json))
+          by_name = {a["name"]: a for a in payload["assets"]}
+          for name, asset in by_name.items():
+              path = Path(remote) / name
+              if path.stat().st_size != asset["size"]:
+                  raise SystemExit(f"remote asset size changed: {name}")
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if asset["digest"] != f"sha256:{digest}":
+                  raise SystemExit(f"remote asset digest changed: {name}")
+              if path.read_bytes() != (Path(local) / name).read_bytes():
+                  raise SystemExit(f"remote asset bytes changed: {name}")
+          if local_identity.tag != tag:
+              raise SystemExit("sealed handoff tag mismatch")
+          PY
+            timeout 120s gh attestation verify "$remote_dir/orphanet.sqlite.gz" \
+              --repo "$GITHUB_REPOSITORY"
+          }
+
+          # GitHub has no conditional release-edit primitive. Recheck the API
+          # and every byte immediately before promotion, then fail closed if the
+          # post-promotion verification observes any unexpected mutation.
+          verify_remote true
+          timeout 30s gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+          verify_remote false
