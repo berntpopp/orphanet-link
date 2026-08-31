@@ -193,8 +193,8 @@ def release_tag(
         return tag
     if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
         raise ReleaseIdentityError("collision revision is only supported for the audited source")
-    if type(collision_revision) is not int or collision_revision < 2:
-        raise ReleaseIdentityError("collision revision must be an integer of at least 2")
+    if type(collision_revision) is not int or collision_revision != 2:
+        raise ReleaseIdentityError("collision revision must be exactly revision 2")
     return f"{tag}-r{collision_revision}"
 
 
@@ -207,16 +207,14 @@ def publication_tag(version: str, orphanet_date: str) -> str:
 
 
 def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
-    """Accept the base identity or an explicit collision revision of at least two."""
+    """Accept the base identity or the one audited collision revision."""
     base = release_tag(version, orphanet_date)
     if tag == base:
         return True
     if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
         return False
     suffix = tag.removeprefix(f"{base}-r")
-    return (
-        tag.startswith(f"{base}-r") and re.fullmatch(r"(?:[2-9]|[1-9][0-9]+)", suffix) is not None
-    )
+    return tag.startswith(f"{base}-r") and suffix == "2"
 
 
 def classify_release(

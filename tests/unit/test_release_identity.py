@@ -36,7 +36,7 @@ def test_release_tag_binds_the_dataset_revision() -> None:
     with pytest.raises(ReleaseIdentityError, match="orphanet_date"):
         release_tag(version, "2026-06-23")
 
-    for invalid_revision in (True, 1, 0, -1, "2"):
+    for invalid_revision in (True, 1, 0, -1, 3, "2"):
         with pytest.raises(ReleaseIdentityError, match="collision revision"):
             release_tag(  # type: ignore[arg-type]
                 version,
@@ -56,6 +56,8 @@ def test_collision_revision_is_only_for_the_audited_source_tuple() -> None:
     )
     with pytest.raises(ReleaseIdentityError, match="audited source"):
         release_tag(future_version, audited_date, collision_revision=2)
+    with pytest.raises(ReleaseIdentityError, match="exactly revision 2"):
+        release_tag(version, audited_date, collision_revision=3)
 
 
 def test_tag_only_existing_release_cannot_be_skipped(tmp_path: Path) -> None:
@@ -141,6 +143,8 @@ def test_directory_identity_verifies_assets_and_schema_before_classifying(tmp_pa
 
     with pytest.raises(ReleaseIdentityError, match="manifest version"):
         read_release_identity(current, f"{TAG}-r1")
+    with pytest.raises(ReleaseIdentityError, match="manifest version"):
+        read_release_identity(current, f"{TAG}-r3")
 
     (existing / "manifest.json").write_text(
         (existing / "manifest.json")
