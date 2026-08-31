@@ -85,6 +85,11 @@ Consolidated Dependabot sweep. No runtime behaviour change.
 
 ### Fixed
 
+- Qualify new Orphanet data-release tags with the exact `orphanet_date` revision. Orphadata can
+  update the dataset while retaining its human version string; the revision suffix prevents a
+  newer dataset from colliding with an older immutable tag while preserving fail-closed identity
+  verification.
+
 - **`.github/dependabot.yml` watched only `github-actions`.** This repo's Python (uv)
   dependencies, its Docker base image, and its Compose stack had therefore never been
   scanned — which is why every Dependabot PR raised here to date was an Actions bump and

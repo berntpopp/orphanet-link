@@ -58,16 +58,23 @@ jobs:
       - name: Extract DB metadata
         id: meta
         run: |
-          VERSION=$(uv run python -c "
+          uv run python - "$GITHUB_OUTPUT" <<'PY'
           import sqlite3
-          print(sqlite3.connect('data/orphanet.sqlite').execute(
-              'select orphanet_version from meta').fetchone()[0])
-          ")
-          SLUG=$(echo "$VERSION" | tr -c '0-9A-Za-z.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
-          TAG="data-$SLUG"
-          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Orphanet version: $VERSION  ->  tag: $TAG"
+          import sys
+          from pathlib import Path
+
+          from orphanet_link.ingest.release_identity import release_tag
+
+          with sqlite3.connect("data/orphanet.sqlite") as connection:
+              version, orphanet_date = connection.execute(
+                  "SELECT orphanet_version, orphanet_date FROM meta WHERE id = 1"
+              ).fetchone()
+          tag = release_tag(version, orphanet_date)
+          with Path(sys.argv[1]).open("a", encoding="utf-8") as output:
+              print(f"tag={tag}", file=output)
+              print(f"version={version}", file=output)
+          print(f"Orphanet version: {version}; revision: {orphanet_date}; tag: {tag}")
+          PY
 
       # -----------------------------------------------------------------------
       # 3. Package deterministic assets before checking for a collision

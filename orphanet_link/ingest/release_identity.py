@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, cast
 
@@ -148,7 +149,7 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     digest, size = _hash_asset(release_dir / ASSET_NAME)
     _checksum(_read_metadata(release_dir / CHECKSUM_NAME), digest)
     version = str(manifest["version"])
-    if _tag_for_version(version) != tag:
+    if release_tag(version, str(manifest["orphanet_date"])) != tag:
         raise ReleaseIdentityError("manifest version does not match release tag")
     return ReleaseIdentity(
         tag=tag,
@@ -162,13 +163,17 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
     )
 
 
-def _tag_for_version(version: str) -> str:
-    """Apply the workflow's stable source-version-to-tag normalization."""
+def release_tag(version: str, orphanet_date: str) -> str:
+    """Return a readable tag bound to the upstream dataset revision."""
     slug = re.sub(r"[^0-9A-Za-z.]+", "-", version).strip("-")
     slug = re.sub(r"-+", "-", slug)
     if not slug:
         raise ReleaseIdentityError("source version cannot produce a release tag")
-    return f"data-{slug}"
+    try:
+        revision = datetime.strptime(orphanet_date, "%Y-%m-%d %H:%M:%S")
+    except ValueError as error:
+        raise ReleaseIdentityError("manifest has an invalid orphanet_date") from error
+    return f"data-{slug}-r{revision:%Y%m%dT%H%M%SZ}"
 
 
 def classify_release(
@@ -214,7 +219,7 @@ def _mapping_identity(value: Mapping[str, object]) -> ReleaseIdentity:
         raise ReleaseIdentityError("release identity has an invalid manifest")
     parsed = _validate_manifest(manifest)
     version = cast(str, parsed["version"])
-    if _tag_for_version(version) != tag:
+    if release_tag(version, cast(str, parsed["orphanet_date"])) != tag:
         raise ReleaseIdentityError("release identity manifest version does not match tag")
     return ReleaseIdentity(
         tag=tag,

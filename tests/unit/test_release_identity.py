@@ -12,16 +12,27 @@ from orphanet_link.ingest.release_identity import (
     ReleaseIdentityError,
     classify_release,
     read_release_identity,
+    release_tag,
 )
 
 FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "releases" / "orphanet_data_1.3.42.json"
 )
-TAG = "data-1.3.42-4.1.8-2025-03-03"
+TAG = "data-1.3.42-4.1.8-2025-03-03-r20251209T070632Z"
 
 
 def _fixture() -> dict[str, object]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_release_tag_binds_the_dataset_revision() -> None:
+    version = "1.3.42 / 4.1.8 [2025-03-03]"
+
+    assert release_tag(version, "2025-12-09 07:06:32") == TAG
+    assert release_tag(version, "2026-06-23 07:53:50").endswith("-r20260623T075350Z")
+
+    with pytest.raises(ReleaseIdentityError, match="orphanet_date"):
+        release_tag(version, "2026-06-23")
 
 
 def test_tag_only_existing_release_cannot_be_skipped(tmp_path: Path) -> None:
@@ -81,7 +92,7 @@ def _write_release(path: Path, *, schema_version: int = 1) -> None:
         json.dumps(
             {
                 "version": "1.3.42 / 4.1.8 [2025-03-03]",
-                "orphanet_date": "2025-03-03",
+                "orphanet_date": "2025-12-09 07:06:32",
                 "schema_version": schema_version,
                 "disorder_count": 1,
                 "xref_count": 2,

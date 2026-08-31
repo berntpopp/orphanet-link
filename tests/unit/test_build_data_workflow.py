@@ -41,6 +41,13 @@ def test_existing_release_downloads_exact_assets_and_compares_identity() -> None
     assert "disorder_count" in helper
 
 
+def test_release_tag_is_qualified_by_the_exact_dataset_revision() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "release_tag" in workflow_text
+    assert "orphanet_date" in workflow_text
+    assert 'TAG="data-$SLUG"' not in workflow_text
+
+
 def test_release_api_ambiguity_fails_closed() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "continue-on-error" not in workflow_text

@@ -97,8 +97,9 @@ to GitHub Releases:
 - **Triggers:** weekly schedule (Orphanet releases are bi-annual, so a weekly
   check catches a new release within a week), `workflow_dispatch`, and any push
   touching `orphanet_link/ingest/**`.
-- **Steps:** build → read `meta.orphanet_version` → compute the tag
-  `data-<version>` → gzip → write `.sha256` + `manifest.json` → download and
+- **Steps:** build → read `meta.orphanet_version` and `meta.orphanet_date` → compute the
+  revision-qualified tag `data-<version>-r<YYYYMMDDTHHMMSSZ>` → gzip → write `.sha256` +
+  `manifest.json` → download and
   verify any existing release's exact assets, source version, schema, and counts
   → no-op only for an identical published release, promote an identical draft,
   or create a new Release. Any mismatch or ambiguous API result fails closed.
@@ -117,7 +118,8 @@ to GitHub Releases:
    local build.
 
 An incompatible prebuilt database triggers a local rebuild rather than a crash.
-Pin a specific release with `ORPHANET_LINK_DATA__RELEASE_TAG=data-<version>`; see
+Pin a specific release with
+`ORPHANET_LINK_DATA__RELEASE_TAG=data-<version>-r<YYYYMMDDTHHMMSSZ>`; see
 [Configuration](configuration.md). Production calls `orphanet-link-data fetch`
 from its init sidecar, with both this release tag and its immutable
 `DATA__BUNDLE_EXPECTED_SHA256` configured; it does not fall back to a local build.
