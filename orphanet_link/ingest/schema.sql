@@ -1,6 +1,19 @@
 -- orphanet-link SQLite schema (SCHEMA_VERSION = 1).
 -- Built atomically by ingest/builder.py; queried read-only by data/repository.py.
 
+-- Byte reproducibility.  page_size, text encoding and auto_vacuum are SQLite
+-- COMPILE-TIME defaults, so the same rows can be laid out into a different file
+-- by a differently-configured SQLite build.  They are pinned to the values this
+-- schema has always produced (page_size 4096 since SQLite 3.12.0, UTF-8, no
+-- auto-vacuum), so the released bytes stop depending on how SQLite was built.
+-- These MUST precede journal_mode and the first CREATE: page_size cannot be
+-- changed once the file has content or once WAL is set, and encoding cannot be
+-- changed once any table exists.  None of them alters the schema SHAPE, so
+-- SCHEMA_VERSION is unchanged and existing databases stay compatible.
+PRAGMA page_size = 4096;
+PRAGMA encoding = 'UTF-8';
+PRAGMA auto_vacuum = NONE;
+
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = OFF;
 

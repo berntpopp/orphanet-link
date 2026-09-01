@@ -437,3 +437,56 @@ def test_push_trigger_is_branch_scoped_to_the_only_publishable_ref() -> None:
     # The branch filter must stay the same ref the publisher will accept.
     publish_if = _workflow()["jobs"]["publish"]["if"]  # type: ignore[index]
     assert "github.ref == 'refs/heads/main'" in publish_if
+
+
+def test_release_is_gated_on_a_measured_byte_reproducible_rebuild() -> None:
+    """The pipeline must PROVE reproducibility on the real corpus, not assume it.
+
+    ``verify_release_identity`` decides no-op vs collision by rebuilding and
+    comparing bytes, so an irreproducible build collides with its own output.
+    The gate runs before anything is packaged, and under a different hash seed
+    than the first build -- a rebuild pinned to one seed would agree with itself
+    while set iteration order was still reaching the file.
+    """
+    workflow = _workflow()
+    steps = workflow["jobs"]["build-and-verify"]["steps"]  # type: ignore[index]
+    names = [step.get("name", "") for step in steps]  # type: ignore[union-attr]
+    gate = names.index("Verify the build is byte-reproducible")
+    assert names.index("Build Orphanet database") < gate
+    # Nothing may be packaged, hashed or compared to a release before the gate.
+    for later in ("Extract DB metadata", "Compress database", "Write manifest.json"):
+        assert gate < names.index(later)
+    script = steps[gate]["run"]  # type: ignore[index]
+    assert "PYTHONHASHSEED=0" in script
+    assert script.count("sha256sum data/orphanet.sqlite") == 2
+    assert 'if [[ "$first" != "$second" ]]' in script
+    assert "exit 1" in script
+
+
+def test_bundle_compression_inputs_are_pinned() -> None:
+    """The gzip level is an input to the bundle digest, so it must not be implicit.
+
+    ``-n`` keeps the run's clock out of the gzip header; ``-6`` pins the level
+    that is currently only gzip's default.
+    """
+    script = next(
+        step["run"]  # type: ignore[index]
+        for step in _workflow()["jobs"]["build-and-verify"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Compress database"
+    )
+    assert "gzip -n -6 -kf data/orphanet.sqlite" in script
+
+
+def test_storage_layout_is_pinned_before_the_first_page_is_written() -> None:
+    """page_size / encoding / auto_vacuum are SQLite COMPILE-TIME defaults.
+
+    Left implicit, a differently-configured SQLite lays the same rows into a
+    different file. They must also precede ``journal_mode`` and every ``CREATE``,
+    because none of them can be changed once the database has content.
+    """
+    schema = (ROOT / "orphanet_link/ingest/schema.sql").read_text()
+    for pragma in ("PRAGMA page_size = 4096;", "PRAGMA encoding = 'UTF-8';"):
+        assert pragma in schema
+        assert schema.index(pragma) < schema.index("PRAGMA journal_mode")
+        assert schema.index(pragma) < schema.index("CREATE TABLE")
+    assert "PRAGMA auto_vacuum = NONE;" in schema

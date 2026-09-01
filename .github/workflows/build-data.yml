@@ -66,6 +66,42 @@ jobs:
         timeout-minutes: 45
 
       # -----------------------------------------------------------------------
+      # 1b. Prove the build is byte-reproducible ON THE REAL CORPUS, before
+      #     anything is packaged or compared to a release.
+      #
+      # The released bytes ARE the release identity: `verify_release_identity`
+      # decides no-op vs collision by rebuilding and comparing. A build that is
+      # not byte-reproducible therefore collides with its own output -- which is
+      # how run 33510537193 failed. Measuring the property on every release beats
+      # asserting it once in a unit test over a three-node fixture.
+      #
+      # Only the DOWNLOAD is slow (~200 MB); assembling the database takes
+      # seconds. The second build reuses the XML already on disk -- the first
+      # build cached each file's ETag, so the conditional GETs return 304 and no
+      # body is transferred -- rather than doubling the load on Orphadata.
+      # -----------------------------------------------------------------------
+      - name: Verify the build is byte-reproducible
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          first="$(sha256sum data/orphanet.sqlite | cut -d' ' -f1)"
+          # `refresh` rebuilds when the database is absent, so move it aside.
+          mv data/orphanet.sqlite "$RUNNER_TEMP/first-build.sqlite"
+          # A DIFFERENT hash seed from the first build, which ran under Python's
+          # default randomised seed: set/dict iteration order must never reach
+          # the file. A test pinned to one seed would pass while the bug is live.
+          PYTHONHASHSEED=0 uv run orphanet-link-data refresh
+          second="$(sha256sum data/orphanet.sqlite | cut -d' ' -f1)"
+          if [[ "$first" != "$second" ]]; then
+            echo "::error::data build is not byte-reproducible: $first != $second"
+            echo "Two builds of one Orphadata snapshot must produce identical bytes." >&2
+            echo "(If a new Orphanet release landed between the two builds, re-run.)" >&2
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/first-build.sqlite"
+          echo "Byte-reproducible across two builds and two hash seeds: sha256=$first"
+
+      # -----------------------------------------------------------------------
       # 2. Read version metadata from the built DB
       # -----------------------------------------------------------------------
       - name: Extract DB metadata
@@ -94,7 +130,15 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Compress database
         run: |
-          gzip -n -kf data/orphanet.sqlite
+          # -n: no name/mtime in the gzip header (the header would otherwise carry
+          # the run's clock). -6: the compression level is an INPUT to the bundle
+          # digest, so pin it rather than inherit gzip's default; -6 IS the current
+          # default, so this pins today's bytes without changing them.
+          # Residual: the deflate implementation itself is not pinned by this repo,
+          # so a runner image with a different gzip could still shift the bundle
+          # digest without the database changing. The reproducibility gate above
+          # compares the DATABASE, which is the part this repository produces.
+          gzip -n -6 -kf data/orphanet.sqlite
           ( cd data && sha256sum orphanet.sqlite.gz > orphanet.sqlite.gz.sha256 )
 
       - name: Write manifest.json
