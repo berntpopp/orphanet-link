@@ -277,6 +277,12 @@ def test_rejects_partial_draft_asset_that_differs_from_package(tmp_path: Path) -
     assets = [_asset("manifest.json", b"different", 1)]
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(
+                200,
+                json=[_release(assets, release_id=99, draft=True, immutable=False)],
+                request=request,
+            )
         return httpx.Response(
             200, json=_release(assets, draft=True, immutable=False), request=request
         )
@@ -371,3 +377,41 @@ def test_rejects_hidden_same_tag_draft_for_published_release(tmp_path: Path) -> 
             token=TEST_TOKEN,
             transport=httpx.MockTransport(handler),
         )
+
+
+def test_rejects_duplicate_same_tag_draft_when_tag_endpoint_returns_a_draft(
+    tmp_path: Path,
+) -> None:
+    contents = {
+        "manifest.json": b"{}",
+        "orphanet.sqlite.gz": b"gzip",
+        "orphanet.sqlite.gz.sha256": b"checksum",
+    }
+    assets = [_asset(name, body, index) for index, (name, body) in enumerate(contents.items(), 1)]
+    endpoint_draft = _release(assets, release_id=1, draft=True, immutable=False)
+    duplicate_draft = _release(assets, release_id=2, draft=True, immutable=False)
+    asset_requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal asset_requests
+        if request.url.path.endswith("/tags/" + TAG):
+            return httpx.Response(200, json=endpoint_draft, request=request)
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(200, json=[endpoint_draft, duplicate_draft], request=request)
+        if "/assets/" in request.url.path:
+            asset_requests += 1
+            for asset in assets:
+                if request.url.path.endswith(f"/assets/{asset['id']}"):
+                    return httpx.Response(200, content=contents[asset["name"]], request=request)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    with pytest.raises(ReleaseAssetError, match="duplicate"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            transport=httpx.MockTransport(handler),
+        )
+
+    assert asset_requests == 0

@@ -561,6 +561,9 @@ jobs:
                   raise SystemExit("release asset inventory contains a duplicate or invalid asset")
               names.add(name)
               ids.add(asset["id"])
+              max_bytes = 4 * 1024**3 if asset["name"] == "orphanet.sqlite.gz" else 1 << 20
+              if type(asset.get("size")) is not int or asset["size"] < 0 or asset["size"] > max_bytes:
+                  raise SystemExit(f"remote asset exceeds its per-asset size bound: {name}")
               path = local_dir / name
               size, digest = file_facts(path)
               if asset.get("url") != f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/releases/assets/{asset['id']}":
@@ -640,19 +643,19 @@ jobs:
           if not isinstance(assets, list) or len(assets) != 3 or {a.get("name") for a in assets} != expected:
               raise SystemExit("release asset inventory is not exactly the three-asset contract")
           for asset in assets:
+              max_bytes = 4 * 1024**3 if asset["name"] == "orphanet.sqlite.gz" else 1 << 20
               if (
                   type(asset.get("id")) is not int
                   or not 0 < asset["id"] <= 2**63 - 1
                   or type(asset.get("size")) is not int
                   or asset["size"] < 0
-                  or asset["size"] > 4 * 1024**3
+                  or asset["size"] > max_bytes
                   or not isinstance(asset.get("digest"), str)
               ):
                   raise SystemExit("release asset lacks immutable id/digest metadata")
               if not asset["digest"].startswith("sha256:"):
                   raise SystemExit("release asset digest is not sha256")
           PY
-            ulimit -f 8388608
             for asset in manifest.json orphanet.sqlite.gz orphanet.sqlite.gz.sha256; do
               asset_id="$(python3 - "$release_json" "$asset" <<'PY'
           import json, sys
@@ -665,8 +668,18 @@ jobs:
           PY
               )"
               test -n "$asset_id"
-              timeout 120s gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
-                --header "Accept: application/octet-stream" > "$remote_dir/$asset"
+              case "$asset" in
+                orphanet.sqlite.gz) max_bytes=$((4 * 1024 * 1024 * 1024)) ;;
+                manifest.json|orphanet.sqlite.gz.sha256) max_bytes=$((1 * 1024 * 1024)) ;;
+                *) echo "unallowlisted release asset" >&2; exit 1 ;;
+              esac
+              max_blocks=$(( (max_bytes + 1023) / 1024 ))
+              (
+                ulimit -f "$max_blocks"
+                timeout 120s gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+                  --header "Accept: application/octet-stream" > "$remote_dir/$asset"
+              )
+              test "$(wc -c < "$remote_dir/$asset")" -le "$max_bytes"
             done
             test "$(find "$remote_dir" -maxdepth 1 -type f | wc -l)" -eq 3
             python3 - "$release_json" "$remote_dir" "$local_dir" "$TAG" "$verifier" "$expected_draft" <<'PY'

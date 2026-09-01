@@ -153,7 +153,7 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert "releases/assets/" in script
     assert "Accept: application/octet-stream" in script
     assert "1048576" in script
-    assert "8388608" in script
+    assert "max_bytes=$((4 * 1024 * 1024 * 1024))" in script
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
@@ -338,6 +338,17 @@ def test_streaming_asset_facts_apply_metadata_limit_to_non_bundle_assets() -> No
         'max_bytes = 4 * 1024**3 if path.name == "orphanet.sqlite.gz" else 1 << 20' in workflow_text
     )
     assert "asset exceeds size bound" in workflow_text
+
+
+def test_remote_asset_transfer_rejects_two_mib_metadata_before_fetch() -> None:
+    """A 2 MiB metadata asset must fail on its advertised size and stream cap."""
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    verify = workflow_text[workflow_text.index("verify_remote()") :]
+    assert 'max_bytes = 4 * 1024**3 if asset["name"] == "orphanet.sqlite.gz" else 1 << 20' in verify
+    assert 'asset["size"] > max_bytes' in verify
+    assert 'ulimit -f "$max_blocks"' in verify
+    fetch = 'gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"'
+    assert verify.index('asset["size"] > max_bytes') < verify.index(fetch)
 
 
 def test_annotated_source_tags_are_explicitly_rejected() -> None:

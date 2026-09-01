@@ -186,6 +186,7 @@ def _find_authenticated_draft(
 ) -> Mapping[str, object] | None:
     """Find one exact draft hidden from GitHub's release-by-tag endpoint."""
     matches: list[Mapping[str, object]] = []
+    expected_match: Mapping[str, object] | None = None
     for page in range(1, 11):
         url = f"https://{_API_HOST}/repos/{repo}/releases?per_page=100&page={page}"
         with open_validated_stream(client, url, headers=headers, policy=policy) as response:
@@ -215,14 +216,25 @@ def _find_authenticated_draft(
                     if expected_release_id != item_id:
                         raise ReleaseAssetError("release inventory contains a duplicate exact tag")
                     continue
-                if expected_release_id is not None or item_id in {
-                    match.get("id") for match in matches
-                }:
-                    raise ReleaseAssetError("release inventory contains duplicate matching drafts")
-                matches.append(item)
+                if expected_release_id is not None:
+                    if item_id != expected_release_id or expected_match is not None:
+                        raise ReleaseAssetError(
+                            "release inventory contains duplicate matching drafts"
+                        )
+                    expected_match = item
+                else:
+                    if item_id in {match.get("id") for match in matches}:
+                        raise ReleaseAssetError(
+                            "release inventory contains duplicate matching drafts"
+                        )
+                    matches.append(item)
         if len(matches) > 1:
             raise ReleaseAssetError("release inventory contains duplicate matching drafts")
         if len(parsed) < 100:
+            if expected_release_id is not None:
+                if expected_match is None:
+                    raise ReleaseAssetError("release inventory does not contain the expected draft")
+                return expected_match
             return matches[0] if matches else None
     raise ReleaseAssetError("release inventory exceeds the ten-page search bound")
 
@@ -279,6 +291,15 @@ def fetch_existing_release(
             release_id, tag_name, target_commitish, is_draft, immutable, assets = _release_assets(
                 parsed, repo, tag
             )
+            if is_draft:
+                _find_authenticated_draft(
+                    client,
+                    repo,
+                    tag,
+                    headers=headers,
+                    policy=metadata_policy,
+                    expected_release_id=release_id,
+                )
             complete = len(assets) == len(RELEASE_ASSETS)
             if not complete and expected_dir is None:
                 raise ReleaseAssetError("partial draft requires an expected package")
