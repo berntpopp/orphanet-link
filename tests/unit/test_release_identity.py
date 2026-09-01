@@ -11,6 +11,7 @@ import pytest
 from orphanet_link.ingest.release_identity import (
     ReleaseIdentityError,
     classify_release,
+    manifest_identity,
     publication_tag,
     read_release_identity,
     release_tag,
@@ -177,3 +178,40 @@ def test_directory_identity_rejects_checksum_or_extra_asset(tmp_path: Path) -> N
     (release / "unexpected").write_text("no")
     with pytest.raises(ReleaseIdentityError, match="exact release assets"):
         read_release_identity(release, TAG)
+
+
+def _manifest_bytes(**overrides: object) -> bytes:
+    manifest: dict[str, object] = {
+        "version": "1.3.42 / 4.1.8 [2025-03-03]",
+        "orphanet_date": COLLISION_DATE,
+        "schema_version": 1,
+        "disorder_count": 1,
+        "xref_count": 2,
+        "gene_count": 3,
+        "phenotype_count": 4,
+        "prevalence_count": 5,
+        "asset": "orphanet.sqlite.gz",
+    }
+    manifest.update(overrides)
+    return json.dumps(manifest).encode("utf-8")
+
+
+def test_manifest_identity_ignores_build_provenance() -> None:
+    """``build_utc`` says when a build ran, so it cannot be part of an identity."""
+    baseline = manifest_identity(_manifest_bytes())
+
+    assert manifest_identity(_manifest_bytes(build_utc="2026-08-31T00:00:00+00:00")) == baseline
+    assert manifest_identity(_manifest_bytes(build_utc="2026-09-01T09:15:00+00:00")) == baseline
+    # Everything that describes the *content* still separates two manifests.
+    assert manifest_identity(_manifest_bytes(disorder_count=99)) != baseline
+    assert manifest_identity(_manifest_bytes(schema_version=2)) != baseline
+    assert manifest_identity(_manifest_bytes(orphanet_date="2025-12-09 07:06:32")) != baseline
+
+
+def test_manifest_identity_rejects_a_malformed_manifest() -> None:
+    with pytest.raises(ReleaseIdentityError, match="invalid JSON"):
+        manifest_identity(b"not json")
+    with pytest.raises(ReleaseIdentityError, match="incomplete or unexpected shape"):
+        manifest_identity(b'{"version": "x"}')
+    with pytest.raises(ReleaseIdentityError, match="invalid build_utc"):
+        manifest_identity(_manifest_bytes(build_utc=""))

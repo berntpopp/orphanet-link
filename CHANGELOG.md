@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Restrict the data pipeline's `push` trigger to `main`. GitHub does not evaluate `paths:`
+  filters for tag pushes, so every `vX.Y.Z` tag started the full data build while the
+  `main`-only publisher could never accept the result.
+- Make the data build byte-reproducible. The classification closure was inserted in
+  `PYTHONHASHSEED`-dependent order, and `build_utc`/`build_duration_s` recorded the run's
+  wall clock, so repeated builds of one upstream snapshot produced different bundle
+  digests (measured on the real 130,815-row corpus: three builds, three digests, three
+  file sizes). `build_utc` is now derived from the source revision, clamped by
+  `SOURCE_DATE_EPOCH` per the reproducible-builds.org specification, and the build
+  duration is no longer stored.
+- Pin `page_size`, `encoding` and `auto_vacuum` in `schema.sql`. They are SQLite
+  compile-time defaults, so the released bytes otherwise depended on how the building
+  SQLite was configured. Pinned to the values already produced, so no existing database
+  changes and `SCHEMA_VERSION` is unchanged.
+- Pin the gzip compression level (`-6`, currently gzip's default) rather than inheriting
+  it: the level is an input to the published bundle digest.
+
+### Added
+
+- Gate every data release on a measured byte-reproducible rebuild. The pipeline now
+  builds the real corpus twice under different hash seeds and refuses to publish unless
+  both builds are byte-identical. The second build reuses the already-downloaded XML
+  (conditional GETs return 304), so the gate costs seconds and no extra load upstream.
+- Apply the `--expected-dir` byte-exact precondition only to a partial draft being resumed,
+  and compare `manifest.json` on identity rather than on bytes. Applying it to published
+  releases made `published_noop` unreachable, because `manifest.json` carries `build_utc`.
+- Accept a published release that no same-tag draft shadows. The post-download ambiguity
+  check required its expected release ID to be found as a *draft*, which a healthy
+  published release never is.
+
 
 ## [0.4.4] - 2026-08-31
 

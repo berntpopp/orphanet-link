@@ -4,15 +4,30 @@ The build is atomic: it writes a temp database under a cross-process lock, runs
 the frozen schema, batch-loads every product, precomputes the classification
 closure, stamps provenance into ``meta``, then ``os.replace``-s the temp file
 over the target so readers never observe a partial database.
+
+The build is also **byte-reproducible**: the same upstream snapshot must produce
+the same SQLite bytes on every machine and every run. That requires two things
+which are easy to lose by accident:
+
+* every row is inserted in a *sorted*, hash-seed-independent order -- iterating a
+  ``set`` orders rows by ``PYTHONHASHSEED``, which silently changes rowids and so
+  the file bytes; and
+* nothing about the *run* is written into the file. ``build_utc`` is derived from
+  the source revision (or ``SOURCE_DATE_EPOCH``), never from the wall clock, and
+  the build duration is not stored at all.
+
+Reproducibility is not cosmetic here: the release pipeline compares a freshly
+built bundle against the published one to decide whether a release is a no-op or
+a collision, and a wall-clock stamp makes every rebuild look like a collision.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import tempfile
-import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +51,9 @@ from orphanet_link.ingest.parsers import (
 from orphanet_link.ingest.schema import load_schema_sql
 
 _BATCH = 5000
+#: SOURCE_DATE_EPOCH is "an ASCII representation of an integer with no fractional
+#: component" -- no sign, no whitespace, no float.
+_EPOCH_VALUE = re.compile(r"[0-9]+")
 
 
 def _executemany(conn: sqlite3.Connection, sql: str, rows: list[tuple[Any, ...]]) -> None:
@@ -73,11 +91,70 @@ def _compute_closure(edges: list[tuple[str, str, str]]) -> list[tuple[str, str]]
         memo[node] = acc
         return acc
 
+    # Both loops iterate SORTED, not set order: ``nodes`` and the memoized
+    # ancestor sets are ``set``s, whose iteration order follows PYTHONHASHSEED.
+    # Unsorted, the same ~130k closure rows insert in a different order on every
+    # run, which changes their rowids and therefore the database bytes. The
+    # returned content is identical either way; only the order is pinned.
     pairs: list[tuple[str, str]] = []
-    for node in nodes:
-        for anc in ancestors(node, frozenset()):
+    for node in sorted(nodes):
+        for anc in sorted(ancestors(node, frozenset())):
             pairs.append((node, anc))
     return pairs
+
+
+def _source_date_epoch() -> datetime | None:
+    """Parse ``SOURCE_DATE_EPOCH`` as specified by reproducible-builds.org.
+
+    https://reproducible-builds.org/specs/source-date-epoch/ defines the value as
+    "an ASCII representation of an integer with no fractional component" counting
+    seconds since the UNIX epoch, and requires that "if the value is malformed,
+    the build process SHOULD exit with a non-zero error code" -- hence
+    ``BuildError`` rather than a silent fallback, which would hand back exactly
+    the irreproducibility the variable exists to remove. An unset or empty value
+    means "not requested", the conventional reading of an absent variable.
+    """
+    raw = os.environ.get("SOURCE_DATE_EPOCH")
+    if not raw:
+        return None
+    if not _EPOCH_VALUE.fullmatch(raw):
+        raise BuildError(
+            "SOURCE_DATE_EPOCH must be an ASCII integer number of seconds since "
+            f"the UNIX epoch, got {raw!r}."
+        )
+    try:
+        return datetime.fromtimestamp(int(raw), UTC)
+    except (OSError, OverflowError, ValueError) as error:
+        raise BuildError(f"SOURCE_DATE_EPOCH is out of range: {raw!r}.") from error
+
+
+def _build_stamp(orphanet_date: str | None) -> str | None:
+    """Return a ``build_utc`` derived from the source, not from the run clock.
+
+    ``datetime.now()`` would make two builds of one upstream snapshot differ, so
+    the stamp is the ``<JDBOR date=>`` revision the database was built from --
+    already a property of the input, and therefore reproducible on its own.
+
+    ``SOURCE_DATE_EPOCH`` is honoured as the specification requires, which is
+    *clamping* rather than substitution: a build "MUST use a timestamp no later
+    than the value of this variable", so a source revision that is already older
+    is kept and only a later one is pulled back. Substituting unconditionally
+    would discard real source provenance for no reproducibility gain. When there
+    is no source revision to clamp, the field stands in for "the current date and
+    time", which the specification says the variable MUST replace.
+
+    Returns ``None`` when neither is available rather than inventing a time.
+    """
+    epoch = _source_date_epoch()
+    revision: datetime | None = None
+    if orphanet_date:
+        try:
+            revision = datetime.strptime(orphanet_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+        except ValueError:
+            revision = None
+    if revision is None:
+        return epoch.isoformat() if epoch is not None else None
+    return min(revision, epoch).isoformat() if epoch is not None else revision.isoformat()
 
 
 def _load_product1(conn: sqlite3.Connection, path: Path) -> tuple[int, int]:
@@ -195,7 +272,6 @@ def build_database(
     data_dir = data_config.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_config.db_path
-    started = time.perf_counter()
 
     with build_lock(data_dir, timeout=data_config.build_lock_timeout):
         fd, tmp_name = tempfile.mkstemp(dir=data_dir, suffix=".sqlite.tmp")
@@ -303,8 +379,12 @@ def build_database(
                         phenotype_count,
                         prevalence_count,
                         len(closure),
-                        datetime.now(UTC).isoformat(),
-                        round(time.perf_counter() - started, 3),
+                        # build_utc: source-derived, so a rebuild reproduces it.
+                        _build_stamp(date),
+                        # build_duration_s: how long this run took is pure run
+                        # provenance -- storing it would put the wall clock back
+                        # into the released bytes.
+                        None,
                     ),
                 )
                 conn.commit()
