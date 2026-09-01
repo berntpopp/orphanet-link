@@ -19,7 +19,7 @@ CHECKSUM_NAME = f"{ASSET_NAME}.sha256"
 RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, "manifest.json"})
 _VERSION_TAG = re.compile(r"^data-[0-9A-Za-z][0-9A-Za-z.-]*$")
 _AUDITED_VERSION = "1.3.42 / 4.1.8 [2025-03-03]"
-_AUDITED_ORPHANET_DATE = "2025-12-09 07:06:32"
+_AUDITED_ORPHANET_DATE = "2026-06-23 07:53:50"
 _COUNT_FIELDS = (
     "disorder_count",
     "xref_count",
