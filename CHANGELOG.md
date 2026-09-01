@@ -6,15 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- Advance the Orphanet data identity to collision revision `-r2` while retaining
-  both audited base-tag drafts, and bind publication to one numeric release ID.
-
-- Verify Orphanet release assets, source identity, schema, and counts before
-  treating an existing data tag as idempotent; differing or ambiguous releases
-  now fail closed without mutation.
-- Bound and authenticate release metadata/assets, reject an inexact remote asset
-  inventory, and separate read-only building from the narrowly privileged,
-  create-only publisher.
 
 ## [0.4.4] - 2026-08-31
 
@@ -26,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the repository badges correctly.
 - Upgrade Debian packages during the image build and remove bootstrap `setuptools` from the
   production virtual environment to remediate fixable OpenSSL and packaging-tool findings.
+- Bind production and Nginx Proxy Manager data initialization to the audited collision-revision
+  release `data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2` and its exact bundle digest.
+- Verify Orphanet release assets, source identity, schema, and counts before treating an existing
+  data tag as idempotent; differing or ambiguous releases now fail closed without mutation.
+- Bound and authenticate release metadata/assets, reject an inexact remote asset inventory, and
+  separate read-only building from the narrowly privileged, create-only publisher.
 
 ## [0.4.3] - 2026-08-10
 

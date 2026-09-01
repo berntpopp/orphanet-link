@@ -123,3 +123,20 @@ Pin a specific release with
 [Configuration](configuration.md). Production calls `orphanet-link-data fetch`
 from its init sidecar, with both this release tag and its immutable
 `DATA__BUNDLE_EXPECTED_SHA256` configured; it does not fall back to a local build.
+
+### Current audited production snapshot
+
+The production and Nginx Proxy Manager overlays materialize this exact immutable
+release before starting the read-only application. The release contains three
+assets; all identities below are retained as audit evidence:
+
+| Artifact | Identity |
+|---|---|
+| Release tag | `data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2` |
+| Compressed database (`orphanet.sqlite.gz`) | `sha256:cc32164c7f64bfb053fabdb2c739ff0236cc039000d3827e7c64160d70dec62f` |
+| `manifest.json` | `sha256:e1ecd0e6687356f20cc7221a832905674176a428377f248146bc2a1c8f9a1b89` |
+| `orphanet.sqlite.gz.sha256` | `sha256:7080bb94267b013b73ee9f9ee1f5513d9deda9ce2f577734a77f99e7d750c9f4` |
+| Expanded SQLite | `sha256:d7408be62d055700901e635c1582c3ccdf5245e87b88f53c90f8fbdb2f284a53` |
+
+The manifest records the audited Orphanet version, source date, schema, and
+entity counts. The application does not resolve `latest` in production.
