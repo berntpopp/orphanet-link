@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Restrict the data pipeline's `push` trigger to `main`. GitHub does not evaluate `paths:`
+  filters for tag pushes, so every `vX.Y.Z` tag started the full data build while the
+  `main`-only publisher could never accept the result.
+- Make the data build byte-reproducible. The classification closure was inserted in
+  `PYTHONHASHSEED`-dependent order, and `build_utc`/`build_duration_s` recorded the run's
+  wall clock, so four builds of one upstream snapshot produced four different bundle
+  digests. `build_utc` is now derived from `SOURCE_DATE_EPOCH` or the source revision, and
+  the build duration is no longer stored.
+- Apply the `--expected-dir` byte-exact precondition only to a partial draft being resumed,
+  and compare `manifest.json` on identity rather than on bytes. Applying it to published
+  releases made `published_noop` unreachable, because `manifest.json` carries `build_utc`.
+- Accept a published release that no same-tag draft shadows. The post-download ambiguity
+  check required its expected release ID to be found as a *draft*, which a healthy
+  published release never is.
+
 
 ## [0.4.4] - 2026-08-31
 

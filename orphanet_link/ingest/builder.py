@@ -4,6 +4,21 @@ The build is atomic: it writes a temp database under a cross-process lock, runs
 the frozen schema, batch-loads every product, precomputes the classification
 closure, stamps provenance into ``meta``, then ``os.replace``-s the temp file
 over the target so readers never observe a partial database.
+
+The build is also **byte-reproducible**: the same upstream snapshot must produce
+the same SQLite bytes on every machine and every run. That requires two things
+which are easy to lose by accident:
+
+* every row is inserted in a *sorted*, hash-seed-independent order -- iterating a
+  ``set`` orders rows by ``PYTHONHASHSEED``, which silently changes rowids and so
+  the file bytes; and
+* nothing about the *run* is written into the file. ``build_utc`` is derived from
+  the source revision (or ``SOURCE_DATE_EPOCH``), never from the wall clock, and
+  the build duration is not stored at all.
+
+Reproducibility is not cosmetic here: the release pipeline compares a freshly
+built bundle against the published one to decide whether a release is a no-op or
+a collision, and a wall-clock stamp makes every rebuild look like a collision.
 """
 
 from __future__ import annotations
@@ -12,7 +27,6 @@ import json
 import os
 import sqlite3
 import tempfile
-import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -73,11 +87,39 @@ def _compute_closure(edges: list[tuple[str, str, str]]) -> list[tuple[str, str]]
         memo[node] = acc
         return acc
 
+    # Both loops iterate SORTED, not set order: ``nodes`` and the memoized
+    # ancestor sets are ``set``s, whose iteration order follows PYTHONHASHSEED.
+    # Unsorted, the same ~130k closure rows insert in a different order on every
+    # run, which changes their rowids and therefore the database bytes. The
+    # returned content is identical either way; only the order is pinned.
     pairs: list[tuple[str, str]] = []
-    for node in nodes:
-        for anc in ancestors(node, frozenset()):
+    for node in sorted(nodes):
+        for anc in sorted(ancestors(node, frozenset())):
             pairs.append((node, anc))
     return pairs
+
+
+def _build_stamp(orphanet_date: str | None) -> str | None:
+    """Return a ``build_utc`` derived from the source, not from the run clock.
+
+    ``datetime.now()`` would make two builds of one upstream snapshot differ, so
+    the stamp comes from ``SOURCE_DATE_EPOCH`` when the caller pins one, and
+    otherwise from the ``<JDBOR date=>`` revision the database was built from.
+    Returns ``None`` when neither is available rather than inventing a time.
+    """
+    epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if epoch:
+        try:
+            return datetime.fromtimestamp(int(epoch), UTC).isoformat()
+        except (OSError, OverflowError, ValueError) as error:
+            raise BuildError("SOURCE_DATE_EPOCH is not a valid POSIX timestamp.") from error
+    if not orphanet_date:
+        return None
+    try:
+        revision = datetime.strptime(orphanet_date, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    return revision.replace(tzinfo=UTC).isoformat()
 
 
 def _load_product1(conn: sqlite3.Connection, path: Path) -> tuple[int, int]:
@@ -195,7 +237,6 @@ def build_database(
     data_dir = data_config.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_config.db_path
-    started = time.perf_counter()
 
     with build_lock(data_dir, timeout=data_config.build_lock_timeout):
         fd, tmp_name = tempfile.mkstemp(dir=data_dir, suffix=".sqlite.tmp")
@@ -303,8 +344,12 @@ def build_database(
                         phenotype_count,
                         prevalence_count,
                         len(closure),
-                        datetime.now(UTC).isoformat(),
-                        round(time.perf_counter() - started, 3),
+                        # build_utc: source-derived, so a rebuild reproduces it.
+                        _build_stamp(date),
+                        # build_duration_s: how long this run took is pure run
+                        # provenance -- storing it would put the wall clock back
+                        # into the released bytes.
+                        None,
                     ),
                 )
                 conn.commit()

@@ -95,8 +95,10 @@ A typical build from a recent Orphanet release produces:
 to GitHub Releases:
 
 - **Triggers:** weekly schedule (Orphanet releases are bi-annual, so a weekly
-  check catches a new release within a week), `workflow_dispatch`, and any push
-  touching `orphanet_link/ingest/**`.
+  check catches a new release within a week), `workflow_dispatch`, and a push to
+  `main` touching `orphanet_link/ingest/**`. GitHub does not evaluate `paths:`
+  filters for tag pushes, so the `branches: [main]` filter is what stops every
+  release tag from starting a build the `main`-only publisher must then refuse.
 - **Steps:** build → read `meta.orphanet_version` and `meta.orphanet_date` → compute the
   revision-qualified tag `data-<version>-r<YYYYMMDDTHHMMSSZ>` → gzip → write `.sha256` +
   `manifest.json` → download and

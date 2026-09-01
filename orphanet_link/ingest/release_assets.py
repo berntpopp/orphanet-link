@@ -22,10 +22,12 @@ from orphanet_link.ingest.download_security import (
 )
 from orphanet_link.ingest.release_identity import (
     ASSET_NAME,
+    MANIFEST_NAME,
     MAX_ASSET_BYTES,
     MAX_METADATA_BYTES,
     RELEASE_ASSETS,
     ReleaseIdentityError,
+    manifest_identity,
     validate_release_id,
 )
 
@@ -169,6 +171,35 @@ def _local_asset_facts(expected_dir: Path, name: str) -> tuple[int, str]:
         raise ReleaseAssetError("expected package asset is missing or unreadable") from error
 
 
+def _manifest_fields(path: Path) -> tuple[tuple[str, object], ...]:
+    """Return the validated identity fields of a bounded local manifest file."""
+    try:
+        info = path.lstat()
+        if not path.is_file() or path.is_symlink() or info.st_size > MAX_METADATA_BYTES:
+            raise ReleaseAssetError("manifest asset is missing, unsafe, or oversized")
+        value = path.read_bytes()
+    except OSError as error:
+        raise ReleaseAssetError("manifest asset is missing or unreadable") from error
+    try:
+        return manifest_identity(value)
+    except ReleaseIdentityError as error:
+        raise ReleaseAssetError(str(error)) from error
+
+
+def _require_matching_manifest(fetched_dir: Path, expected_dir: Path) -> None:
+    """Compare two manifests on identity rather than on bytes.
+
+    ``manifest.json`` embeds ``build_utc``, so an otherwise identical rebuild need
+    not reproduce it byte for byte. Comparing the validated identity fields keeps
+    the resume precondition strict about *what* the draft holds without demanding
+    a byte-exact reproduction of *when* it was built.
+    """
+    if _manifest_fields(fetched_dir / MANIFEST_NAME) != _manifest_fields(
+        expected_dir / MANIFEST_NAME
+    ):
+        raise ReleaseAssetError(f"existing asset {MANIFEST_NAME} does not match package")
+
+
 def _metadata_url(repo: str, tag: str) -> str:
     if not _REPO.fullmatch(repo):
         raise ReleaseAssetError("release repository is invalid")
@@ -183,8 +214,17 @@ def _find_authenticated_draft(
     headers: Mapping[str, str],
     policy: DownloadPolicy,
     expected_release_id: int | None = None,
+    expect_draft: bool = True,
 ) -> Mapping[str, object] | None:
-    """Find one exact draft hidden from GitHub's release-by-tag endpoint."""
+    """Find one exact draft hidden from GitHub's release-by-tag endpoint.
+
+    ``expected_release_id`` binds the search to one already-selected release. That
+    release may itself be a draft (``expect_draft=True``: prove the draft is the
+    only one carrying the tag) or a published release (``expect_draft=False``:
+    prove no *hidden* draft shadows it). Both are ambiguity checks, but only the
+    first can require a draft to be present -- a healthy published release has no
+    draft at all, so demanding one rejects every correct published release.
+    """
     matches: list[Mapping[str, object]] = []
     expected_match: Mapping[str, object] | None = None
     for page in range(1, 11):
@@ -232,7 +272,7 @@ def _find_authenticated_draft(
             raise ReleaseAssetError("release inventory contains duplicate matching drafts")
         if len(parsed) < 100:
             if expected_release_id is not None:
-                if expected_match is None:
+                if expect_draft and expected_match is None:
                     raise ReleaseAssetError("release inventory does not contain the expected draft")
                 return expected_match
             return matches[0] if matches else None
@@ -303,6 +343,14 @@ def fetch_existing_release(
             complete = len(assets) == len(RELEASE_ASSETS)
             if not complete and expected_dir is None:
                 raise ReleaseAssetError("partial draft requires an expected package")
+            # The byte-exact precondition belongs ONLY to a partial draft being
+            # resumed: its already-uploaded assets are kept as-is and are never
+            # re-compared as a complete directory afterwards. A complete draft or
+            # a published release is compared semantically by
+            # ``verify_release_identity``; requiring byte equality there made
+            # ``published_noop`` unreachable, because ``manifest.json`` carries
+            # ``build_utc`` and a rebuild can never match an old one exactly.
+            resume_dir = expected_dir if (is_draft and not complete) else None
             if destination.exists():
                 raise ReleaseAssetError("release destination already exists")
             destination.mkdir(mode=0o700)
@@ -310,8 +358,10 @@ def fetch_existing_release(
                 name = asset["name"]
                 assert isinstance(name, str)
                 url, size, expected_digest = _asset_facts(asset, repo)
-                if expected_dir is not None:
-                    local_size, local_digest = _local_asset_facts(expected_dir, name)
+                # manifest.json is excluded here and checked semantically below,
+                # once it has been fetched: its bytes legitimately differ.
+                if resume_dir is not None and name != MANIFEST_NAME:
+                    local_size, local_digest = _local_asset_facts(resume_dir, name)
                     if (size, expected_digest) != (local_size, local_digest):
                         raise ReleaseAssetError(f"existing asset {name} does not match package")
                 max_bytes = MAX_ASSET_BYTES if name == ASSET_NAME else MAX_METADATA_BYTES
@@ -341,7 +391,11 @@ def fetch_existing_release(
                         raise ReleaseAssetError(
                             f"release asset {name} digest does not match metadata"
                         )
+            if resume_dir is not None and any(asset["name"] == MANIFEST_NAME for asset in assets):
+                _require_matching_manifest(destination, resume_dir)
             if not is_draft:
+                # A published release must be shadowed by no same-tag draft; it is
+                # not itself expected to appear in the inventory as one.
                 _find_authenticated_draft(
                     client,
                     repo,
@@ -349,6 +403,7 @@ def fetch_existing_release(
                     headers=headers,
                     policy=metadata_policy,
                     expected_release_id=release_id,
+                    expect_draft=False,
                 )
     except DownloadError as error:
         raise ReleaseAssetError(str(error)) from error

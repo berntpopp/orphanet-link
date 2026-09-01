@@ -418,3 +418,22 @@ def test_publisher_uses_only_the_immutable_handoff_verifier() -> None:
     assert "uv run" not in scripts
     assert "release-package/verifier/release_identity.py" in scripts
     assert "timeout 120s" in scripts
+
+
+def test_push_trigger_is_branch_scoped_to_the_only_publishable_ref() -> None:
+    """A tag push must not start a pipeline that is structurally unable to publish.
+
+    GitHub does not evaluate ``paths:`` filters for tag pushes, so a ``push``
+    trigger with ``paths:`` but no ``branches:`` ran the full 45-minute data build
+    on every ``vX.Y.Z`` release tag -- while ``publish`` is gated on
+    ``refs/heads/main`` and could never accept that run.  ``on`` is the YAML 1.1
+    boolean ``True`` once parsed, hence the key below.
+    """
+    triggers = _workflow()[True]  # type: ignore[index]
+    assert isinstance(triggers, dict)
+    push = triggers["push"]
+    assert push["branches"] == ["main"]  # type: ignore[index]
+    assert push["paths"] == ["orphanet_link/ingest/**"]  # type: ignore[index]
+    # The branch filter must stay the same ref the publisher will accept.
+    publish_if = _workflow()["jobs"]["publish"]["if"]  # type: ignore[index]
+    assert "github.ref == 'refs/heads/main'" in publish_if

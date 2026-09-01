@@ -7,7 +7,7 @@
 # IMPORTANT — first run:
 #   Trigger this workflow manually via the GitHub Actions "Run workflow" button
 #   (workflow_dispatch).  Subsequent runs happen automatically every Monday at
-#   06:00 UTC, or when ingest code changes are pushed.
+#   06:00 UTC, or when ingest code changes are pushed to main.
 #
 # CONFIGURATION:
 #   The default value of ORPHANET_LINK_DATA__RELEASE_REPO in orphanet_link/config.py
@@ -21,6 +21,12 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
   push:
+    # GitHub does not evaluate `paths:` for tag pushes, so without `branches:`
+    # every `vX.Y.Z` tag ran the whole 45-minute data build -- and the `publish`
+    # job below is gated on `refs/heads/main`, so such a run could only ever
+    # rebuild and fail. Restricting the trigger removes exactly the runs that
+    # could never have published anything.
+    branches: [main]
     paths:
       - "orphanet_link/ingest/**"
 
@@ -95,7 +101,6 @@ jobs:
         run: |
           uv run python - <<'EOF'
           import json, sqlite3
-          from datetime import datetime, timezone
           from orphanet_link.constants import SCHEMA_VERSION
 
           conn = sqlite3.connect("data/orphanet.sqlite")
@@ -112,9 +117,13 @@ jobs:
               "gene_count":       row["gene_count"],
               "phenotype_count":  row["phenotype_count"],
               "prevalence_count": row["prevalence_count"],
-              "build_utc":        row["build_utc"],
               "asset":            "orphanet.sqlite.gz",
           }
+          # build_utc is source-derived (see ingest/builder.py::_build_stamp), so it
+          # is stable across rebuilds. It stays an OPTIONAL identity field: emit it
+          # only when present, never as a null the manifest validator rejects.
+          if row["build_utc"]:
+              manifest["build_utc"] = row["build_utc"]
           with open("data/manifest.json", "w") as f:
               json.dump(manifest, f, indent=2)
           print(json.dumps(manifest, indent=2))

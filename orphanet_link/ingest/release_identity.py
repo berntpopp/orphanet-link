@@ -16,7 +16,8 @@ MAX_ASSET_BYTES = 4 * 1024**3
 MAX_RELEASE_ID = (1 << 63) - 1
 ASSET_NAME = "orphanet.sqlite.gz"
 CHECKSUM_NAME = f"{ASSET_NAME}.sha256"
-RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, "manifest.json"})
+MANIFEST_NAME = "manifest.json"
+RELEASE_ASSETS = frozenset({ASSET_NAME, CHECKSUM_NAME, MANIFEST_NAME})
 _VERSION_TAG = re.compile(r"^data-[0-9A-Za-z][0-9A-Za-z.-]*$")
 _AUDITED_VERSION = "1.3.42 / 4.1.8 [2025-03-03]"
 _AUDITED_ORPHANET_DATE = "2026-06-23 07:53:50"
@@ -128,6 +129,18 @@ def _validate_manifest(parsed: Mapping[str, object]) -> Mapping[str, object]:
     return parsed
 
 
+def manifest_identity(value: bytes) -> tuple[tuple[str, object], ...]:
+    """Return only the identity-bearing manifest fields, dropping run provenance.
+
+    ``build_utc`` is declared optional by ``_OPTIONAL_MANIFEST_FIELDS`` precisely
+    because it records *when* a build ran, not *what* it contains. Two manifests
+    that agree here describe the same release even though their bytes differ, so
+    this is the only sound way to compare a rebuilt manifest against a stored one.
+    """
+    parsed = _manifest(value)
+    return tuple((key, parsed[key]) for key in sorted(_MANIFEST_FIELDS))
+
+
 def _checksum(value: bytes, digest: str) -> None:
     try:
         text = value.decode("ascii")
@@ -155,7 +168,7 @@ def read_release_identity(release_dir: Path, tag: str) -> ReleaseIdentity:
         raise ReleaseIdentityError("exact release assets are required") from error
     if names != RELEASE_ASSETS:
         raise ReleaseIdentityError("exact release assets are required")
-    manifest = _manifest(_read_metadata(release_dir / "manifest.json"))
+    manifest = _manifest(_read_metadata(release_dir / MANIFEST_NAME))
     digest, size = _hash_asset(release_dir / ASSET_NAME)
     _checksum(_read_metadata(release_dir / CHECKSUM_NAME), digest)
     version = str(manifest["version"])

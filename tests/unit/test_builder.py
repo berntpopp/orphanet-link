@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from orphanet_link.config import OrphanetDataConfig
 from orphanet_link.constants import SCHEMA_VERSION
-from orphanet_link.ingest.builder import build_database
+from orphanet_link.exceptions import BuildError
+from orphanet_link.ingest.builder import _compute_closure, build_database
 
 FX = Path(__file__).parent.parent / "fixtures"
 
@@ -99,3 +106,83 @@ def test_build_meta(tmp_path):
     assert meta["orphanet_version"].startswith("1.3.42")
     assert meta["orphanet_date"].startswith("2025-12-09")
     assert meta["disorder_count"] >= 2
+
+
+# ---------------------------------------------------------------------------
+# Byte reproducibility.  The release pipeline decides "no-op vs collision" by
+# rebuilding the current snapshot and comparing it to the published bundle, so a
+# build that is not byte-reproducible reports a collision against its own output.
+# ---------------------------------------------------------------------------
+
+
+_CLOSURE_PROBE = """
+import hashlib
+import sys
+
+from orphanet_link.ingest.builder import _compute_closure
+
+# ~5k synthetic edges: enough nodes that set iteration order actually varies.
+edges = [(f"n{i}", f"n{i // 3}", "156") for i in range(1, 5000)]
+pairs = _compute_closure(edges)
+sys.stdout.write(f"{len(pairs)} {hashlib.sha256(repr(pairs).encode()).hexdigest()}")
+"""
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_closure_row_order_is_independent_of_the_hash_seed() -> None:
+    """``_compute_closure`` must not leak ``set`` iteration order into row order.
+
+    Regression: both loops iterated sets, so the ~130k closure rows inserted in a
+    PYTHONHASHSEED-dependent order.  The row *content* was always identical -- the
+    rowids, and therefore the SQLite bytes and the gzip digest, were not.
+    """
+    results = set()
+    for seed in ("0", "1", "2", "3"):
+        completed = subprocess.run(  # noqa: S603 -- runs this interpreter on repo code.
+            [sys.executable, "-c", _CLOSURE_PROBE],
+            cwd=Path(__file__).resolve().parents[2],
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        results.add(completed.stdout)
+    assert len(results) == 1, f"closure order varies with PYTHONHASHSEED: {sorted(results)}"
+
+
+def test_closure_pairs_are_emitted_in_sorted_order() -> None:
+    """The in-process statement of the same contract, without a subprocess."""
+    pairs = _compute_closure([("c", "b", "156"), ("b", "a", "156"), ("z", "a", "156")])
+    assert pairs == sorted(pairs)
+
+
+def test_build_is_byte_reproducible(tmp_path):
+    """Two builds of one upstream snapshot must produce identical database bytes."""
+    first = _build(tmp_path / "first")
+    second = _build(tmp_path / "second")
+    assert _sha256(first) == _sha256(second)
+
+
+def test_meta_records_no_run_provenance(tmp_path):
+    """``build_utc`` follows the source revision; the run duration is not stored."""
+    conn = _ro(_build(tmp_path))
+    meta = conn.execute("SELECT * FROM meta").fetchone()
+    # <JDBOR date="2025-12-09 07:06:32"> in tests/fixtures/en_product1.xml.
+    assert meta["build_utc"] == "2025-12-09T07:06:32+00:00"
+    assert meta["build_duration_s"] is None
+
+
+def test_source_date_epoch_pins_the_build_stamp(tmp_path, monkeypatch):
+    """A caller may pin ``build_utc`` explicitly; it still never reads the clock."""
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1700000000")
+    conn = _ro(_build(tmp_path))
+    assert conn.execute("SELECT build_utc FROM meta").fetchone()[0] == "2023-11-14T22:13:20+00:00"
+
+
+def test_invalid_source_date_epoch_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "not-a-timestamp")
+    with pytest.raises(BuildError, match="SOURCE_DATE_EPOCH"):
+        _build(tmp_path)

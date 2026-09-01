@@ -63,7 +63,10 @@ for the release stamp stored in the `meta` table.
 ### CI: `.github/workflows/build-data.yml`
 
 - **Triggers:** weekly schedule (catches bi-annual Orphanet releases within a
-  week), `workflow_dispatch`, and `push` touching `orphanet_link/ingest/**`.
+  week), `workflow_dispatch`, and a `push` to `main` touching
+  `orphanet_link/ingest/**`. The branch filter is load-bearing: GitHub ignores
+  `paths:` for tag pushes, so without it every `vX.Y.Z` tag ran the full data
+  build — which the `main`-only publisher could never accept.
 - **Steps:** checkout → `uv sync` → `uv run orphanet-link-data build` →
   read `meta.orphanet_version` → compute tag `data-<version>` → if a Release for
   that tag already exists, exit (idempotent) → gzip the DB → write `.sha256` and
