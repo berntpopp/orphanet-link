@@ -235,6 +235,63 @@ def test_discovers_an_authenticated_draft_when_tag_lookup_returns_404(tmp_path: 
     }
 
 
+def test_resumes_partial_draft_only_when_existing_asset_matches_package(tmp_path: Path) -> None:
+    content = b"matching manifest"
+    expected = tmp_path / "expected"
+    expected.mkdir()
+    (expected / "manifest.json").write_bytes(content)
+    assets = [_asset("manifest.json", content, 1)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/tags/" + TAG):
+            return httpx.Response(404, request=request)
+        if request.url.path.endswith("/releases"):
+            return httpx.Response(
+                200,
+                json=[_release(assets, release_id=7, draft=True, immutable=False)],
+                request=request,
+            )
+        if request.url.path.endswith("/assets/1"):
+            return httpx.Response(200, content=content, request=request)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    result = fetch_existing_release(
+        REPO,
+        TAG,
+        tmp_path / "release",
+        token=TEST_TOKEN,
+        expected_dir=expected,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result is not None
+    assert result.is_draft is True
+    assert result.complete is False
+    assert (tmp_path / "release" / "manifest.json").read_bytes() == content
+
+
+def test_rejects_partial_draft_asset_that_differs_from_package(tmp_path: Path) -> None:
+    expected = tmp_path / "expected"
+    expected.mkdir()
+    (expected / "manifest.json").write_bytes(b"expected")
+    assets = [_asset("manifest.json", b"different", 1)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json=_release(assets, draft=True, immutable=False), request=request
+        )
+
+    with pytest.raises(ReleaseAssetError, match="does not match package"):
+        fetch_existing_release(
+            REPO,
+            TAG,
+            tmp_path / "release",
+            token=TEST_TOKEN,
+            expected_dir=expected,
+            transport=httpx.MockTransport(handler),
+        )
+
+
 def test_rejects_published_release_with_wrong_response_identity(tmp_path: Path) -> None:
     assets = [_asset("manifest.json", b"{}", 1), _asset("orphanet.sqlite.gz", b"gzip", 2)]
     assets.append(_asset("orphanet.sqlite.gz.sha256", b"checksum", 3))

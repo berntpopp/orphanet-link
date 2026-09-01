@@ -257,12 +257,38 @@ def test_asset_upload_uses_github_uploads_host_and_exact_release_id_name() -> No
         if step.get("name") == "Create and upload exact-ID draft"
     )
     script = create["run"]
-    assert "--hostname uploads.github.com" in script
-    assert '"repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name"' in script
     assert (
-        "api.github.com"
-        not in script[script.index("upload_asset()") : script.index("refetched_json")]
+        "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name="
+        in script
     )
+    assert "--proto '=https'" in script
+    assert "--data-binary" in script
+
+
+def test_asset_upload_uses_bounded_exact_https_curl_not_gh_hostname_rewriting() -> None:
+    workflow = _workflow()
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "curl" in workflow_text
+    assert (
+        "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name="
+        in workflow_text
+    )
+    assert "--proto '=https'" in workflow_text
+    assert "--fail-with-body" in workflow_text
+    assert "--max-filesize 1048576" in workflow_text
+    assert "--data-binary" in workflow_text
+    assert "--hostname uploads.github.com" not in workflow_text
+    assert "gh api --method POST" in str(workflow["jobs"]["publish"])
+
+
+def test_partial_drafts_are_resumable_only_with_exact_package_assets() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert '"draft_partial"' in workflow_text
+    assert "--expected-dir" in workflow_text
+    assert "draft_partial)" in workflow_text
+    publish = workflow_text[workflow_text.index("Publish exact rechecked draft") :]
+    assert "upload_missing_assets" in publish
+    assert publish.index("upload_missing_assets") < publish.index("verify_remote true")
 
 
 def test_annotated_source_tags_are_explicitly_rejected() -> None:
@@ -275,7 +301,7 @@ def test_writer_bounds_ids_and_times_out_create() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "2**63 - 1" in workflow_text
     assert "timeout 30s gh api --method POST" in workflow_text
-    assert "timeout 120s gh api --hostname uploads.github.com --method POST" in workflow_text
+    assert "timeout 120s curl --proto '=https'" in workflow_text
 
 
 def test_publisher_is_trusted_and_can_generate_provenance() -> None:
