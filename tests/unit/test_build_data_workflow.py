@@ -287,6 +287,21 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
     assert "gh attestation verify" in scripts
 
 
+def test_existing_draft_promotion_reuses_attestation_without_creating_one() -> None:
+    """Only a newly created release may invoke the privileged attestation action."""
+    workflow = _workflow()
+    steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+    attest = next(
+        step for step in steps if "actions/attest-build-provenance@" in step.get("uses", "")
+    )
+    assert attest["if"] == "needs.build-and-verify.outputs.state == 'create'"
+
+    publish = next(step for step in steps if step.get("name") == "Publish exact rechecked draft")
+    script = publish["run"]
+    assert "verify_remote true" in script
+    assert "gh attestation verify" in script
+
+
 def test_publisher_uses_only_the_immutable_handoff_verifier() -> None:
     workflow = _workflow()
     publish = workflow["jobs"]["publish"]  # type: ignore[index]

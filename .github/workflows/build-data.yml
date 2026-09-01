@@ -408,6 +408,7 @@ jobs:
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
       - name: Attest the exact release subject
+        if: needs.build-and-verify.outputs.state == 'create'
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
           subject-path: release-package/assets/orphanet.sqlite.gz
