@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop requiring a pre-existing release's (or its source tag's) recorded commit to equal
+  the *current* run's `$GITHUB_SHA` in `build-data.yml`'s "Verify existing release
+  identity" step. A release's origin commit is fixed at the moment it is created; once any
+  later commit lands on `main` (docs, chores, other pipelines), that exact-equality check
+  made every subsequent re-verification of an unchanged upstream snapshot collide with its
+  own prior release, leaving `published_noop` unreachable again in practice (observed on
+  run 33535909443, one push after d1ae07b/#76). The check now accepts the release's commit
+  if it is `$GITHUB_SHA` itself or an ancestor of it (verified via the compare API), which
+  preserves the original guarantee -- the artifact is bound to reviewed, branch-protected
+  history -- without pinning it to one specific run.
+
 ## [0.4.5] - 2026-09-01
 
 ### Fixed
