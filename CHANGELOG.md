@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-09-01
+
 ### Fixed
 
 - Restrict the data pipeline's `push` trigger to `main`. GitHub does not evaluate `paths:`
