@@ -153,7 +153,7 @@ def test_publisher_refetches_and_reverifies_the_draft_immediately_before_publish
     assert "releases/assets/" in script
     assert "Accept: application/octet-stream" in script
     assert "1048576" in script
-    assert "8388608" in script
+    assert "max_bytes=$((4 * 1024 * 1024 * 1024))" in script
     assert "verify_release_identity" in script
     assert "read_release_identity" in script
     assert "draft_publish_existing" in script
@@ -248,6 +248,109 @@ def test_create_uses_api_response_id_without_replacing_it_from_tag_inventory() -
     assert 'inventory_tag "$after"' not in script
 
 
+def test_asset_upload_uses_github_uploads_host_and_exact_release_id_name() -> None:
+    """GitHub release asset uploads must use uploads.github.com, not api.github.com."""
+    workflow = _workflow()
+    create = next(
+        step
+        for step in workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Create and upload exact-ID draft"
+    )
+    script = create["run"]
+    assert (
+        "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name="
+        in script
+    )
+    assert "--proto '=https'" in script
+    assert "--data-binary" in script
+
+
+def test_asset_upload_uses_bounded_exact_https_curl_not_gh_hostname_rewriting() -> None:
+    workflow = _workflow()
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "curl" in workflow_text
+    assert (
+        "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name="
+        in workflow_text
+    )
+    assert "--proto '=https'" in workflow_text
+    assert "--fail-with-body" in workflow_text
+    assert "--max-filesize 1048576" in workflow_text
+    assert "--data-binary" in workflow_text
+    assert "--hostname uploads.github.com" not in workflow_text
+    assert "gh api --method POST" in str(workflow["jobs"]["publish"])
+
+
+def test_partial_drafts_are_resumable_only_with_exact_package_assets() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert '"draft_partial"' in workflow_text
+    assert "--expected-dir" in workflow_text
+    assert "draft_partial)" in workflow_text
+    publish = workflow_text[workflow_text.index("Publish exact rechecked draft") :]
+    assert "upload_missing_assets" in publish
+    assert publish.index("upload_missing_assets") < publish.index("verify_remote true")
+
+
+def test_partial_draft_publisher_attests_and_serializes_same_tag_writers() -> None:
+    workflow = _workflow()
+    publish = workflow["jobs"]["publish"]  # type: ignore[index]
+    assert publish["concurrency"] == {  # type: ignore[index]
+        "group": "orphanet-publish-${{ github.repository }}-${{ needs.build-and-verify.outputs.tag }}",
+        "cancel-in-progress": False,
+    }
+    steps = publish["steps"]  # type: ignore[index]
+    attest = next(
+        step for step in steps if "actions/attest-build-provenance@" in step.get("uses", "")
+    )
+    assert "draft_publish_existing" in attest["if"]
+    script = next(
+        step["run"] for step in steps if step.get("name") == "Publish exact rechecked draft"
+    )
+    assert script.count("verify_remote true") >= 2
+    assert script.index("ensure_source_tag") < script.rindex("verify_remote true")
+
+
+def test_publication_comparison_is_streaming_and_release_metadata_get_is_bounded() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "def file_facts(path: Path)" in workflow_text
+    assert "def same_bytes(left: Path, right: Path)" in workflow_text
+    assert "path.read_bytes()" not in workflow_text
+    assert "api_get() {" in workflow_text
+    assert "--max-filesize 1048576" in workflow_text
+    assert 'gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" >' not in workflow_text
+
+
+def test_final_prepromotion_check_requires_source_tag_presence() -> None:
+    workflow = _workflow()
+    script = next(
+        step["run"]
+        for step in workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Publish exact rechecked draft"
+    )
+    assert "verify_remote true true" in script
+    assert "require_tag_present" in script
+    assert 'if sys.argv[3] == "true" and sys.argv[5] != "true":' in script
+
+
+def test_streaming_asset_facts_apply_metadata_limit_to_non_bundle_assets() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert (
+        'max_bytes = 4 * 1024**3 if path.name == "orphanet.sqlite.gz" else 1 << 20' in workflow_text
+    )
+    assert "asset exceeds size bound" in workflow_text
+
+
+def test_remote_asset_transfer_rejects_two_mib_metadata_before_fetch() -> None:
+    """A 2 MiB metadata asset must fail on its advertised size and stream cap."""
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    verify = workflow_text[workflow_text.index("verify_remote()") :]
+    assert 'max_bytes = 4 * 1024**3 if asset["name"] == "orphanet.sqlite.gz" else 1 << 20' in verify
+    assert 'asset["size"] > max_bytes' in verify
+    assert 'ulimit -f "$max_blocks"' in verify
+    fetch = 'gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"'
+    assert verify.index('asset["size"] > max_bytes') < verify.index(fetch)
+
+
 def test_annotated_source_tags_are_explicitly_rejected() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "lightweight commit" in workflow_text
@@ -258,7 +361,7 @@ def test_writer_bounds_ids_and_times_out_create() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "2**63 - 1" in workflow_text
     assert "timeout 30s gh api --method POST" in workflow_text
-    assert "timeout 120s gh api --method POST" in workflow_text
+    assert "timeout 120s curl --proto '=https'" in workflow_text
 
 
 def test_publisher_is_trusted_and_can_generate_provenance() -> None:
@@ -287,14 +390,17 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
     assert "gh attestation verify" in scripts
 
 
-def test_existing_draft_promotion_reuses_attestation_without_creating_one() -> None:
-    """Only a newly created release may invoke the privileged attestation action."""
+def test_existing_draft_promotion_attests_the_subject_before_publishing() -> None:
+    """A resumed draft receives provenance before it can be promoted."""
     workflow = _workflow()
     steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
     attest = next(
         step for step in steps if "actions/attest-build-provenance@" in step.get("uses", "")
     )
-    assert attest["if"] == "needs.build-and-verify.outputs.state == 'create'"
+    assert attest["if"] == (
+        "needs.build-and-verify.outputs.state == 'create' || "
+        "needs.build-and-verify.outputs.state == 'draft_publish_existing'"
+    )
 
     publish = next(step for step in steps if step.get("name") == "Publish exact rechecked draft")
     script = publish["run"]
