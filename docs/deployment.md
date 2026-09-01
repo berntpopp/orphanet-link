@@ -61,6 +61,35 @@ boundary). Backends are
 **unauthenticated by design** and must be reachable only through the router or a
 reverse proxy — never published directly to the internet.
 
+## Fleet deploy contract
+
+`docker/docker-compose.npm.yml` is the file the GeneFoundry fleet controller
+(`strato_v6_docker_npm`) deploys and validates: it renders the file with
+`docker compose config --format json`, projects it, and refuses to author a
+deployment record unless every application service declares the controller's
+required security fields. Both services in this overlay — the run-once
+`orphanet-data-init` sidecar and the `orphanet_link` app — declare an explicit
+numeric `user: "999:999"`, this image's real uid:gid from `docker/Dockerfile`
+(`useradd --system --gid app`); never copy this literal into a sibling repo,
+the fleet runs mixed uids. `user` must **not** appear on the Compose files
+listed in `container-release.json`'s `service.compose_files`
+(`docker/docker-compose.yml`, `docker/docker-compose.prod.yml`) — the shared
+release gate forbids it there.
+
+As of `strato_v6_docker_npm` PR #41 the controller relaxed this contract
+(`user`/`volumes` are optional-but-validated; `cpus` accepts a finite positive
+float), so the init sidecar's integer `cpus: 1` (previously `"0.5"`) is no
+longer strictly required — it is kept as-is.
+
+Self-check against the controller's own projection before assuming a change
+here deploys cleanly:
+
+```bash
+ORPHANET_LINK_IMAGE="ghcr.io/berntpopp/orphanet-link@sha256:<64 hex>" docker compose -f docker/docker-compose.npm.yml config --format json > /tmp/r.json
+# from strato_v6_docker_npm:
+uv run python -c "import sys,json; sys.path.insert(0,'scripts'); from utils.deployment_preflight import canonical_projection; canonical_projection(json.load(open('/tmp/r.json')), project='orphanet-link'); print('PROJECTION OK')"
+```
+
 ## Host / Origin / CORS boundary
 
 HTTP deployments enforce **exact** Host and Origin allowlists on every route.
