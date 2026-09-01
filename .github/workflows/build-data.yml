@@ -379,7 +379,7 @@ jobs:
             name="$1"
             content_type="$2"
             path="$3"
-            timeout 120s gh api --method POST \
+            timeout 120s gh api --hostname uploads.github.com --method POST \
               "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
               --header "Content-Type: $content_type" \
               --input "$path" \

@@ -248,6 +248,23 @@ def test_create_uses_api_response_id_without_replacing_it_from_tag_inventory() -
     assert 'inventory_tag "$after"' not in script
 
 
+def test_asset_upload_uses_github_uploads_host_and_exact_release_id_name() -> None:
+    """GitHub release asset uploads must use uploads.github.com, not api.github.com."""
+    workflow = _workflow()
+    create = next(
+        step
+        for step in workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Create and upload exact-ID draft"
+    )
+    script = create["run"]
+    assert "--hostname uploads.github.com" in script
+    assert '"repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name"' in script
+    assert (
+        "api.github.com"
+        not in script[script.index("upload_asset()") : script.index("refetched_json")]
+    )
+
+
 def test_annotated_source_tags_are_explicitly_rejected() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "lightweight commit" in workflow_text
@@ -258,7 +275,7 @@ def test_writer_bounds_ids_and_times_out_create() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "2**63 - 1" in workflow_text
     assert "timeout 30s gh api --method POST" in workflow_text
-    assert "timeout 120s gh api --method POST" in workflow_text
+    assert "timeout 120s gh api --hostname uploads.github.com --method POST" in workflow_text
 
 
 def test_publisher_is_trusted_and_can_generate_provenance() -> None:
