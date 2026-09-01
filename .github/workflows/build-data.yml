@@ -143,6 +143,17 @@ jobs:
         run: |
           set -euo pipefail
           existing_dir="$RUNNER_TEMP/orphanet-existing-release"
+          api_get() {
+            endpoint="$1"
+            output="$2"
+            timeout 30s curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+              --max-filesize 1048576 --connect-timeout 15 --max-time 30 \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "$output" "https://api.github.com/$endpoint"
+            test "$(wc -c < "$output")" -le 1048576
+          }
           uv run python - "$CURRENT_RELEASE_DIR" "$TAG" <<'PY'
           import sys
           from pathlib import Path
@@ -179,8 +190,7 @@ jobs:
           PY
               )"
               remote_json="$RUNNER_TEMP/orphanet-existing-release.json"
-              timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$remote_json"
-              test "$(wc -c < "$remote_json")" -le 1048576
+              api_get "repos/$GITHUB_REPOSITORY/releases/$release_id" "$remote_json"
               python3 - "$remote_json" "$TAG" "$GITHUB_SHA" "$remote_state" "$release_id" <<'PY'
           import json, sys
           from orphanet_link.ingest.release_identity import validate_release_id
@@ -293,6 +303,12 @@ jobs:
     # Tags may exercise the read-only build and verification job, but a tag
     # provenance identity must never be promoted to a release.
     if: github.ref_protected == true && github.ref == 'refs/heads/main' && (needs.build-and-verify.outputs.state == 'draft_publish_existing' || needs.build-and-verify.outputs.state == 'create')
+    # The exact tag is a single-writer lease for the privileged publisher.
+    # Combined with the final release/tag identity checks, this closes races
+    # between concurrent workflow dispatches for the same release.
+    concurrency:
+      group: orphanet-publish-${{ github.repository }}-${{ needs.build-and-verify.outputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: data-release
@@ -380,6 +396,17 @@ jobs:
           print(release_id)
           PY
           )"
+          api_get() {
+            endpoint="$1"
+            output="$2"
+            timeout 30s curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+              --max-filesize 1048576 --connect-timeout 15 --max-time 30 \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "$output" "https://api.github.com/$endpoint"
+            test "$(wc -c < "$output")" -le 1048576
+          }
           upload_asset() {
             name="$1"
             content_type="$2"
@@ -407,8 +434,7 @@ jobs:
           upload_asset "orphanet.sqlite.gz.sha256" "text/plain" "release-package/assets/orphanet.sqlite.gz.sha256"
           upload_asset "manifest.json" "application/json" "release-package/assets/manifest.json"
           refetched_json="$RUNNER_TEMP/orphanet-refetched-release.json"
-          timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$refetched_json"
-          test "$(wc -c < "$refetched_json")" -le 1048576
+          api_get "repos/$GITHUB_REPOSITORY/releases/$release_id" "$refetched_json"
           python3 - "$refetched_json" "$release_id" "$TAG" "$GITHUB_SHA" <<'PY'
           import json
           import sys
@@ -426,7 +452,7 @@ jobs:
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
       - name: Attest the exact release subject
-        if: needs.build-and-verify.outputs.state == 'create'
+        if: needs.build-and-verify.outputs.state == 'create' || needs.build-and-verify.outputs.state == 'draft_publish_existing'
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
           subject-path: release-package/assets/orphanet.sqlite.gz
@@ -450,6 +476,18 @@ jobs:
           if int(sys.argv[1]) > 2**63 - 1:
               raise SystemExit("release ID exceeds the safe bound")
           PY
+
+          api_get() {
+            endpoint="$1"
+            output="$2"
+            timeout 30s curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+              --max-filesize 1048576 --connect-timeout 15 --max-time 30 \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "$output" "https://api.github.com/$endpoint"
+            test "$(wc -c < "$output")" -le 1048576
+          }
 
           upload_asset() {
             name="$1"
@@ -475,8 +513,7 @@ jobs:
 
           upload_missing_assets() {
             release_json="$RUNNER_TEMP/orphanet-upload-release.json"
-            timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$release_json"
-            test "$(wc -c < "$release_json")" -le 1048576
+            api_get "repos/$GITHUB_REPOSITORY/releases/$release_id" "$release_json"
             missing="$RUNNER_TEMP/orphanet-missing-assets"
             python3 - "$release_json" "$TAG" "$GITHUB_SHA" "$local_dir" > "$missing" <<'PY'
           import hashlib
@@ -485,6 +522,17 @@ jobs:
           import re
           import sys
           from pathlib import Path
+
+          def file_facts(path: Path) -> tuple[int, str]:
+              digest = hashlib.sha256()
+              size = 0
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1 << 20), b""):
+                      size += len(chunk)
+                      if size > 4 * 1024**3:
+                          raise SystemExit(f"asset exceeds size bound: {path.name}")
+                      digest.update(chunk)
+              return size, digest.hexdigest()
 
           payload = json.load(open(sys.argv[1]))
           if type(payload.get("id")) is not int or payload["id"] != int(os.environ["RELEASE_ID"]):
@@ -514,11 +562,11 @@ jobs:
               names.add(name)
               ids.add(asset["id"])
               path = local_dir / name
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              size, digest = file_facts(path)
               if asset.get("url") != f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/releases/assets/{asset['id']}":
                   raise SystemExit(f"existing asset {name} URL is not bound to its ID")
               if (
-                  asset.get("size") != path.stat().st_size
+                  asset.get("size") != size
                   or not isinstance(asset.get("digest"), str)
                   or re.fullmatch(r"sha256:[0-9a-f]{64}", asset["digest"]) is None
                   or asset["digest"] != f"sha256:{digest}"
@@ -570,8 +618,7 @@ jobs:
           if not isinstance(target, dict) or target.get("type") != "commit" or target.get("sha") != sys.argv[2]:
               raise SystemExit("source tag does not resolve to the exact reviewed source")
           PY
-            timeout 30s gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$release_json"
-            test "$(wc -c < "$release_json")" -le 1048576
+            api_get "repos/$GITHUB_REPOSITORY/releases/$release_id" "$release_json"
             python3 - "$release_json" "$expected_draft" <<'PY'
           import json
           import os
@@ -630,6 +677,27 @@ jobs:
 
           release_json, remote, local, tag, verifier, expected_draft = sys.argv[1:]
           module = runpy.run_path(verifier)
+          def file_facts(path: Path) -> tuple[int, str]:
+              digest = hashlib.sha256()
+              size = 0
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1 << 20), b""):
+                      size += len(chunk)
+                      if size > 4 * 1024**3:
+                          raise SystemExit(f"asset exceeds size bound: {path.name}")
+                      digest.update(chunk)
+              return size, digest.hexdigest()
+
+          def same_bytes(left: Path, right: Path) -> bool:
+              with left.open("rb") as left_handle, right.open("rb") as right_handle:
+                  while True:
+                      left_chunk = left_handle.read(1 << 20)
+                      right_chunk = right_handle.read(1 << 20)
+                      if left_chunk != right_chunk:
+                          return False
+                      if not left_chunk:
+                          return True
+
           local_identity = module["read_release_identity"](Path(local), tag)
           state = module["verify_release_identity"](
               Path(local), Path(remote), tag, is_draft=(expected_draft == "true")
@@ -640,12 +708,12 @@ jobs:
           by_name = {a["name"]: a for a in payload["assets"]}
           for name, asset in by_name.items():
               path = Path(remote) / name
-              if path.stat().st_size != asset["size"]:
+              size, digest = file_facts(path)
+              if size != asset["size"]:
                   raise SystemExit(f"remote asset size changed: {name}")
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
               if asset["digest"] != f"sha256:{digest}":
                   raise SystemExit(f"remote asset digest changed: {name}")
-              if path.read_bytes() != (Path(local) / name).read_bytes():
+              if not same_bytes(path, Path(local) / name):
                   raise SystemExit(f"remote asset bytes changed: {name}")
           if local_identity.tag != tag:
               raise SystemExit("sealed handoff tag mismatch")
@@ -717,6 +785,9 @@ jobs:
             fi
           }
           ensure_source_tag
+          # Recheck both the release and source tag after tag acquisition and
+          # immediately before the irreversible draft->published transition.
+          verify_remote true
           timeout 30s gh api --method PATCH \
             "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false \
             > "$RUNNER_TEMP/orphanet-promotion.json"

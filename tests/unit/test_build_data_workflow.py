@@ -291,6 +291,35 @@ def test_partial_drafts_are_resumable_only_with_exact_package_assets() -> None:
     assert publish.index("upload_missing_assets") < publish.index("verify_remote true")
 
 
+def test_partial_draft_publisher_attests_and_serializes_same_tag_writers() -> None:
+    workflow = _workflow()
+    publish = workflow["jobs"]["publish"]  # type: ignore[index]
+    assert publish["concurrency"] == {  # type: ignore[index]
+        "group": "orphanet-publish-${{ github.repository }}-${{ needs.build-and-verify.outputs.tag }}",
+        "cancel-in-progress": False,
+    }
+    steps = publish["steps"]  # type: ignore[index]
+    attest = next(
+        step for step in steps if "actions/attest-build-provenance@" in step.get("uses", "")
+    )
+    assert "draft_publish_existing" in attest["if"]
+    script = next(
+        step["run"] for step in steps if step.get("name") == "Publish exact rechecked draft"
+    )
+    assert script.count("verify_remote true") >= 2
+    assert script.index("ensure_source_tag") < script.rindex("verify_remote true")
+
+
+def test_publication_comparison_is_streaming_and_release_metadata_get_is_bounded() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert "def file_facts(path: Path)" in workflow_text
+    assert "def same_bytes(left: Path, right: Path)" in workflow_text
+    assert "path.read_bytes()" not in workflow_text
+    assert "api_get() {" in workflow_text
+    assert "--max-filesize 1048576" in workflow_text
+    assert 'gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" >' not in workflow_text
+
+
 def test_annotated_source_tags_are_explicitly_rejected() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "lightweight commit" in workflow_text
@@ -330,14 +359,17 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
     assert "gh attestation verify" in scripts
 
 
-def test_existing_draft_promotion_reuses_attestation_without_creating_one() -> None:
-    """Only a newly created release may invoke the privileged attestation action."""
+def test_existing_draft_promotion_attests_the_subject_before_publishing() -> None:
+    """A resumed draft receives provenance before it can be promoted."""
     workflow = _workflow()
     steps = workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
     attest = next(
         step for step in steps if "actions/attest-build-provenance@" in step.get("uses", "")
     )
-    assert attest["if"] == "needs.build-and-verify.outputs.state == 'create'"
+    assert attest["if"] == (
+        "needs.build-and-verify.outputs.state == 'create' || "
+        "needs.build-and-verify.outputs.state == 'draft_publish_existing'"
+    )
 
     publish = next(step for step in steps if step.get("name") == "Publish exact rechecked draft")
     script = publish["run"]
