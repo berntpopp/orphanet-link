@@ -583,6 +583,7 @@ jobs:
 
           verify_remote() {
             expected_draft="$1"
+            require_tag_present="${2:-false}"
             remote_dir="$(mktemp -d "$RUNNER_TEMP/orphanet-publisher-recheck.XXXXXX")"
             release_json="${remote_dir}.json"
             source_tag="${remote_dir}.tag.json"
@@ -591,7 +592,7 @@ jobs:
             tag_status=$?
             set -e
             test "$(wc -c < "$source_tag")" -le 1048576
-            python3 - "$source_tag" "$GITHUB_SHA" "$expected_draft" "$tag_status" <<'PY'
+            python3 - "$source_tag" "$GITHUB_SHA" "$expected_draft" "$tag_status" "$require_tag_present" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -608,7 +609,7 @@ jobs:
           header = raw[:header_end].decode("ascii", "replace").splitlines()[0].split()
           status = int(header[1]) if len(header) > 1 and header[1].isdigit() else 0
           if status == 404 and command_status != 0:
-              if sys.argv[3] == "true":
+              if sys.argv[3] == "true" and sys.argv[5] != "true":
                   print("source tag is absent before promotion")
                   raise SystemExit(0)
               raise SystemExit("published release requires an exact present source tag")
@@ -680,10 +681,11 @@ jobs:
           def file_facts(path: Path) -> tuple[int, str]:
               digest = hashlib.sha256()
               size = 0
+              max_bytes = 4 * 1024**3 if path.name == "orphanet.sqlite.gz" else 1 << 20
               with path.open("rb") as handle:
                   for chunk in iter(lambda: handle.read(1 << 20), b""):
                       size += len(chunk)
-                      if size > 4 * 1024**3:
+                      if size > max_bytes:
                           raise SystemExit(f"asset exceeds size bound: {path.name}")
                       digest.update(chunk)
               return size, digest.hexdigest()
@@ -787,7 +789,7 @@ jobs:
           ensure_source_tag
           # Recheck both the release and source tag after tag acquisition and
           # immediately before the irreversible draft->published transition.
-          verify_remote true
+          verify_remote true true
           timeout 30s gh api --method PATCH \
             "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false \
             > "$RUNNER_TEMP/orphanet-promotion.json"

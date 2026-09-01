@@ -320,6 +320,26 @@ def test_publication_comparison_is_streaming_and_release_metadata_get_is_bounded
     assert 'gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" >' not in workflow_text
 
 
+def test_final_prepromotion_check_requires_source_tag_presence() -> None:
+    workflow = _workflow()
+    script = next(
+        step["run"]
+        for step in workflow["jobs"]["publish"]["steps"]  # type: ignore[index]
+        if step.get("name") == "Publish exact rechecked draft"
+    )
+    assert "verify_remote true true" in script
+    assert "require_tag_present" in script
+    assert 'if sys.argv[3] == "true" and sys.argv[5] != "true":' in script
+
+
+def test_streaming_asset_facts_apply_metadata_limit_to_non_bundle_assets() -> None:
+    workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
+    assert (
+        'max_bytes = 4 * 1024**3 if path.name == "orphanet.sqlite.gz" else 1 << 20' in workflow_text
+    )
+    assert "asset exceeds size bound" in workflow_text
+
+
 def test_annotated_source_tags_are_explicitly_rejected() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "lightweight commit" in workflow_text
