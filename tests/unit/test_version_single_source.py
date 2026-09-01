@@ -25,6 +25,13 @@ def test_pyproject_is_the_single_source() -> None:
     assert version(DIST) == _pyproject_version()
 
 
+def test_citation_matches_the_unreleased_application_version() -> None:
+    citation = Path(__file__).resolve().parents[2] / "CITATION.cff"
+    content = citation.read_text(encoding="utf-8")
+    assert f"version: {_pyproject_version()}" in content
+    assert "date-released: '2026-08-31'" in content
+
+
 def test_dunder_version_is_metadata_derived() -> None:
     assert __version__ == version(DIST)
     assert build_info()["version"] == version(DIST)

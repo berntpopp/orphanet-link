@@ -13,8 +13,11 @@ from orphanet_link.config import OrphanetDataConfig
 from orphanet_link.services.refresh import bootstrap_data
 
 ROOT = Path(__file__).resolve().parents[2]
-_DATA_TAG = "data-1.3.42-4.1.8-2025-03-03"
-_BUNDLE_SHA256 = "a8af3fc39cca2acedd12c188cb0e1f907ac320e73d2b965c17ad5a28c5f5fe38"
+_DATA_TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2"
+_BUNDLE_SHA256 = "cc32164c7f64bfb053fabdb2c739ff0236cc039000d3827e7c64160d70dec62f"
+_MANIFEST_SHA256 = "e1ecd0e6687356f20cc7221a832905674176a428377f248146bc2a1c8f9a1b89"
+_CHECKSUM_SHA256 = "7080bb94267b013b73ee9f9ee1f5513d9deda9ce2f577734a77f99e7d750c9f4"
+_EXPANDED_SHA256 = "d7408be62d055700901e635c1582c3ccdf5245e87b88f53c90f8fbdb2f284a53"
 
 
 def _production_compose() -> dict[str, Any]:
@@ -131,6 +134,22 @@ def test_current_docs_distinguish_local_bootstrap_from_production_sidecar() -> N
     assert "Production uses its hardened init sidecar" in data
     assert "DATA__BUNDLE_EXPECTED_SHA256" in configuration
     assert "On first boot the entrypoint bootstraps" not in deployment
+
+
+def test_documented_current_data_identity_is_complete() -> None:
+    """The operator-facing docs must preserve every audited artifact identity."""
+    docs = "\n".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in (".env.docker.example", "docs/data.md", "docs/deployment.md")
+    )
+    for value in (
+        _DATA_TAG,
+        _BUNDLE_SHA256,
+        _MANIFEST_SHA256,
+        _CHECKSUM_SHA256,
+        _EXPANDED_SHA256,
+    ):
+        assert value in docs
 
 
 @pytest.mark.asyncio
