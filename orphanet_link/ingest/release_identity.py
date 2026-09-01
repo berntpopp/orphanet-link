@@ -206,16 +206,33 @@ def release_tag(
         return tag
     if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
         raise ReleaseIdentityError("collision revision is only supported for the audited source")
-    if type(collision_revision) is not int or collision_revision != 2:
-        raise ReleaseIdentityError("collision revision must be exactly revision 2")
+    if type(collision_revision) is not int or collision_revision != 3:
+        raise ReleaseIdentityError("collision revision must be exactly revision 3")
     return f"{tag}-r{collision_revision}"
 
 
 def publication_tag(version: str, orphanet_date: str) -> str:
-    """Select the audited collision tag only for the known historical dataset."""
+    """Select the audited collision tag only for the known historical dataset.
+
+    Revision 2 (``data-...-r2``) was published 2026-09-01T10:26Z, built by the
+    pre-d1ae07b (#76) non-deterministic pipeline. #76's schema pins
+    (page_size/encoding/auto_vacuum) and sorted closure ordering changed the
+    physical bytes of *any* rebuild from that point on, so no future rebuild
+    can ever byte-match `-r2` again even though the upstream Orphadata content
+    (version, date, and every row count) is unchanged -- confirmed directly:
+    rebuilding on 2026-09-01T23:21Z under the fixed pipeline reproduced the
+    identical manifest identity (`1.3.42 / 4.1.8 [2025-03-03]`,
+    `2026-06-23 07:53:50`, matching disorder/xref/gene/phenotype/prevalence
+    counts) but a different uncompressed database digest
+    (`580403ff...` vs. `-r2`'s `d7408be6...`). `-r2` remains the correct,
+    attested, immutable release for the data it was published with; `-r3` is
+    the tag for the current, permanently-reproducible pipeline's output of the
+    same upstream snapshot, following the same one-time collision-revision
+    precedent as `-r2` itself (see 4bd3fba).
+    """
     base = release_tag(version, orphanet_date)
     if (version, orphanet_date) == (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
-        return release_tag(version, orphanet_date, collision_revision=2)
+        return release_tag(version, orphanet_date, collision_revision=3)
     return base
 
 
@@ -227,7 +244,7 @@ def _tag_matches_manifest(version: str, orphanet_date: str, tag: str) -> bool:
     if (version, orphanet_date) != (_AUDITED_VERSION, _AUDITED_ORPHANET_DATE):
         return False
     suffix = tag.removeprefix(f"{base}-r")
-    return tag.startswith(f"{base}-r") and suffix == "2"
+    return tag.startswith(f"{base}-r") and suffix == "3"
 
 
 def classify_release(

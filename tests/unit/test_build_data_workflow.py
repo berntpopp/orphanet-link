@@ -45,7 +45,7 @@ def test_release_tag_is_qualified_by_the_exact_dataset_revision() -> None:
     workflow_text = (ROOT / ".github/workflows/build-data.yml").read_text()
     assert "publication_tag" in workflow_text
     assert "orphanet_date" in workflow_text
-    assert "collision_revision=2" in (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
+    assert "collision_revision=3" in (ROOT / "orphanet_link/ingest/release_identity.py").read_text()
     assert 'TAG="data-$SLUG"' not in workflow_text
 
 

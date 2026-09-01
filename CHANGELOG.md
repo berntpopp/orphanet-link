@@ -18,6 +18,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   if it is `$GITHUB_SHA` itself or an ancestor of it (verified via the compare API), which
   preserves the original guarantee -- the artifact is bound to reviewed, branch-protected
   history -- without pinning it to one specific run.
+- Advance the audited collision revision for the `1.3.42 / 4.1.8 [2025-03-03]` /
+  `2026-06-23 07:53:50` dataset from `-r2` to `-r3`. `-r2` was published 2026-09-01T10:26Z,
+  built by the pre-d1ae07b (#76) non-deterministic pipeline; #76's schema pins
+  (`page_size`/`encoding`/`auto_vacuum`) and sorted closure ordering permanently changed the
+  physical bytes any rebuild produces from that point on, so no rebuild under the fixed
+  pipeline can ever byte-match `-r2` again even though every upstream field (version, date,
+  and all five row counts) is unchanged -- confirmed directly by rebuilding on
+  2026-09-01T23:21Z and comparing manifests. `-r2` remains the correct, attested, immutable
+  release for the bytes it was published with and is not modified; production stays pinned
+  to it until a separate, deliberate adoption change (matching how `-r2` itself was adopted
+  in #75) decides to move. This follows the same one-time collision-revision precedent `-r2`
+  itself used (4bd3fba).
 
 ## [0.4.5] - 2026-09-01
 
