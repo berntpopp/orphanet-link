@@ -90,6 +90,69 @@ ORPHANET_LINK_IMAGE="ghcr.io/berntpopp/orphanet-link@sha256:<64 hex>" docker com
 uv run python -c "import sys,json; sys.path.insert(0,'scripts'); from utils.deployment_preflight import canonical_projection; canonical_projection(json.load(open('/tmp/r.json')), project='orphanet-link'); print('PROJECTION OK')"
 ```
 
+## Runtime data identity (`runtime-v1`)
+
+`container-release.json` declares `"data_identity_contract": "runtime-v1"`, which
+makes a pinned deployment prove — at run time, from the bytes on the volume — that
+it is serving the data release it was configured for.
+
+- The `orphanet-data-init` sidecar downloads the pinned release bundle, verifies its
+  SHA-256, decompresses it, and then writes `data-identity.json` beside
+  `orphanet.sqlite` in the data volume. That manifest records the release tag, the
+  compressed bundle digest, and the expanded database's size and SHA-256.
+- On every `/health` call the application **rehashes the database** and compares it to
+  that manifest. On success `/health` returns 200 with:
+
+  ```json
+  {
+    "status": "ok",
+    "data_available": true,
+    "release_identity": {
+      "schema_version": 1,
+      "data_identity": {
+        "expected": {"release_tag": "data-…", "digest": "sha256:…"},
+        "actual":   {"release_tag": "data-…", "digest": "sha256:…"}
+      }
+    }
+  }
+  ```
+
+  `expected` is the pin (`ORPHANET_LINK_DATA__RELEASE_TAG` +
+  `ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256`, both injected by the overlays from
+  `container-release.json`); `actual` is what was materialized. Unequal, unreadable or
+  tampered → **503**, `"data_available": false`, and no `release_identity`.
+- Without a pin (local development, `release_tag: latest`) there is no release identity
+  to prove: `/health` stays a 200 liveness probe and simply reports `data_available`.
+
+The controller's read-only semantic probe is:
+
+```bash
+docker compose -f docker/docker-compose.npm.yml exec -T orphanet_link \
+  python -m orphanet_link.data_probe
+# {"data_schema_version":"1","query_result_sha256":"<64 hex>","record_count":11645}
+```
+
+It opens the database `mode=ro&immutable=1`, needs no network, writes nothing, and runs
+as the container's non-root user. `record_count` counts `disorder` rows;
+`query_result_sha256` is the SHA-256 of the UTF-8 first `orpha_code`
+(`ORDER BY orpha_code LIMIT 1`).
+
+### Selectable data volume
+
+The npm overlay names the data volume through a variable so a new data release can be
+activated by switching to a candidate volume:
+
+```yaml
+volumes:
+  orphanet-data:
+    name: ${ORPHANET_DATA_VOLUME:-orphanet-link-npm_orphanet-data}
+```
+
+The default is exactly the volume that exists on the server today, so an unchanged
+environment renders an unchanged name. The application addresses its data by explicit
+version directory (`/data/<release tag>`) and never through a `latest` symlink, so a
+candidate volume needs nothing a fresh one would lack.
+
 ## Host / Origin / CORS boundary
 
 HTTP deployments enforce **exact** Host and Origin allowlists on every route.

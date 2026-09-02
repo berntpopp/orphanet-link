@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from orphanet_link import __version__
+from orphanet_link.runtime_data_identity import is_immutable_release_tag
 
 # Project root: <repo>/orphanet_link/config.py -> <repo>
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -152,6 +153,22 @@ class OrphanetDataConfig(BaseModel):
     def db_path(self) -> Path:
         """Absolute path to the SQLite database file."""
         return self.data_dir / self.db_filename
+
+    def expected_data_identity(self) -> dict[str, str] | None:
+        """Return the immutable data release identity this deployment is configured for.
+
+        ``None`` when the store is not pinned -- development and local builds resolve
+        ``latest`` and declare no bundle digest, so there is no release identity to
+        prove. A pinned deployment (the production overlays set both values from
+        ``container-release.json``) turns ``/health`` from a liveness probe into a
+        readiness gate: the materialized data must prove exactly this pair.
+        """
+        if self.bundle_expected_sha256 is None or not is_immutable_release_tag(self.release_tag):
+            return None
+        return {
+            "release_tag": self.release_tag,
+            "digest": f"sha256:{self.bundle_expected_sha256}",
+        }
 
     @field_validator("data_dir")
     @classmethod

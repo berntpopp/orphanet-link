@@ -104,6 +104,14 @@ artifact, verify its sha256, and fall back to a local build; production's init s
 declared immutable digest and the app only reads the resulting snapshot. `make data-status` prints
 the loaded release. Details: [Data & the build pipeline](docs/data.md).
 
+**Runtime data identity** — a pinned deployment proves which data release it is serving. The init
+sidecar records the release tag and digests in `data-identity.json` beside the database; `/health`
+rehashes the database on every call and publishes `data_available` plus a `release_identity`
+`{expected, actual}` pair, answering 503 if they differ. `python -m orphanet_link.data_probe`
+prints a deterministic read-only `{data_schema_version, record_count, query_result_sha256}`
+observation of the live store. Details:
+[Runtime data identity](docs/deployment.md#runtime-data-identity-runtime-v1).
+
 **Licence** — Orphadata are **CC BY 4.0**. Redistributing a *derived* SQLite database is explicitly
 permitted provided attribution is given and changes are indicated.
 

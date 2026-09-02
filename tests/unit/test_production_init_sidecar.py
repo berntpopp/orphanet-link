@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,9 @@ def test_production_app_waits_for_the_read_only_pinned_snapshot() -> None:
     assert app["environment"]["ORPHANET_LINK_DATA__DATA_DIR"] == f"/data/{_DATA_TAG}"
     assert app["environment"]["ORPHANET_LINK_DATA__AUTO_BOOTSTRAP"] == "false"
     assert app["environment"]["ORPHANET_LINK_DATA__REFRESH_ENABLED"] == "false"
+    # The app is given the pin so it can PROVE it on /health, never to fetch it.
+    assert app["environment"]["ORPHANET_LINK_DATA__RELEASE_TAG"] == _DATA_TAG
+    assert app["environment"]["ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256"] == _BUNDLE_SHA256
     assert app["volumes"] == ["orphanet-data:/data:ro"]
 
 
@@ -96,6 +100,49 @@ def test_release_manifest_declares_the_init_role_and_immutable_bundle_smoke() ->
         }
     ]
     assert release["smoke"]["profile"] == "immutable-bundle"
+
+
+def test_release_manifest_adopts_the_runtime_data_identity_contract() -> None:
+    """`runtime-v1` makes the central release gate verify /health against this pin.
+
+    The smoke stack runs the base Compose file, where the application bootstraps its own
+    data, so the pin has to reach it through `smoke_environment` -- otherwise the gate
+    would compare the declared identity against whatever `latest` happened to be.
+    """
+    release = json.loads((ROOT / "container-release.json").read_text(encoding="utf-8"))
+
+    assert release["data_identity_contract"] == "runtime-v1"
+    assert release["smoke_environment"] == [
+        f"ORPHANET_LINK_DATA__RELEASE_TAG={_DATA_TAG}",
+        f"ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256={_BUNDLE_SHA256}",
+    ]
+
+
+def test_deployed_overlay_data_volume_is_selectable_and_defaults_to_the_live_volume() -> None:
+    """A data release is activated by switching volumes, so the name must be a variable.
+
+    The default is the exact physical volume on the server today: an unchanged
+    environment must render an unchanged name, or a routine application deploy would
+    silently move the service onto an empty volume.
+    """
+    raw = (ROOT / "docker/docker-compose.npm.yml").read_text(encoding="utf-8")
+    volume = _npm_compose()["volumes"]["orphanet-data"]
+
+    assert volume["name"] == "${ORPHANET_DATA_VOLUME:-orphanet-link-npm_orphanet-data}"
+    assert "${ORPHANET_DATA_VOLUME:-orphanet-link-npm_orphanet-data}" in raw
+    # The application must not depend on a `latest` alias a candidate volume would lack.
+    assert "/data/latest" not in raw
+
+
+def test_deployed_overlay_init_sidecar_keeps_the_run_once_hardening() -> None:
+    """The one writer of the data volume stays numeric-user, run-once and read-only."""
+    init = _npm_compose()["services"]["orphanet-data-init"]
+
+    assert re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", init["user"])
+    assert init["restart"] == "no"
+    assert init["read_only"] is True
+    assert init["cap_drop"] == ["ALL"]
+    assert init["security_opt"] == ["no-new-privileges:true"]
 
 
 def test_npm_deploy_uses_the_same_init_sidecar_boundary() -> None:
@@ -118,6 +165,8 @@ def test_npm_deploy_uses_the_same_init_sidecar_boundary() -> None:
     environment = _environment(app["environment"])
     assert environment["ORPHANET_LINK_DATA__DATA_DIR"] == f"/data/{_DATA_TAG}"
     assert environment["ORPHANET_LINK_DATA__AUTO_BOOTSTRAP"] == "false"
+    assert environment["ORPHANET_LINK_DATA__RELEASE_TAG"] == _DATA_TAG
+    assert environment["ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256"] == _BUNDLE_SHA256
     assert app["volumes"] == ["orphanet-data:/data:ro"]
 
 

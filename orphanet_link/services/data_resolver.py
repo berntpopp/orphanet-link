@@ -9,6 +9,7 @@ Three public entry points:
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import hashlib
 import json
@@ -30,6 +31,14 @@ from orphanet_link.ingest.download_security import (
     copy_bounded,
     open_validated_stream,
     stream_atomic,
+)
+from orphanet_link.runtime_data_identity import (
+    IDENTITY_FILENAME,
+    RuntimeDataIdentityError,
+    build_identity_manifest,
+    is_immutable_release_tag,
+    verify_runtime_identity,
+    write_identity_manifest,
 )
 
 if TYPE_CHECKING:
@@ -165,6 +174,40 @@ def _download_sidecar(url: str, config: OrphanetDataConfig) -> bytes:
         raise DataUnavailableError(str(exc)) from exc
 
 
+def _record_identity(config: OrphanetDataConfig, bundle_sha256: str) -> None:
+    """Write (or drop) the identity manifest that describes what was just materialized.
+
+    Only an immutable release tag can be an identity. An unpinned fetch or a local build
+    must actively REMOVE a manifest left by an earlier pinned fetch: a stale manifest
+    beside fresh bytes is the one state that could otherwise be mistaken for a proof.
+    """
+    identity_path = config.data_dir / IDENTITY_FILENAME
+    if not is_immutable_release_tag(config.release_tag):
+        identity_path.unlink(missing_ok=True)
+        return
+    try:
+        write_identity_manifest(
+            config.data_dir,
+            build_identity_manifest(
+                config.data_dir,
+                release_tag=config.release_tag,
+                bundle_sha256=bundle_sha256,
+                database=config.db_filename,
+            ),
+        )
+    except RuntimeDataIdentityError as exc:
+        # Fail the materialization: serving data whose identity cannot be recorded is
+        # exactly the state the runtime identity contract exists to make impossible.
+        identity_path.unlink(missing_ok=True)
+        raise DataUnavailableError("Could not record the materialized data identity.") from exc
+
+
+def _drop_identity(config: OrphanetDataConfig) -> None:
+    """Remove any identity manifest; the bytes beside it are about to change."""
+    with contextlib.suppress(OSError):
+        (config.data_dir / IDENTITY_FILENAME).unlink(missing_ok=True)
+
+
 def _check_schema(db_path: Path) -> None:
     """Raise DataUnavailableError if meta.schema_version != SCHEMA_VERSION."""
     try:
@@ -273,10 +316,12 @@ def fetch_prebuilt(config: OrphanetDataConfig) -> Path:
                 "Failed to decompress the prebuilt Orphanet database."
             ) from exc
         _check_schema(db_path_tmp)
+        _drop_identity(config)
         os.replace(db_path_tmp, db_path)
     finally:
         gz_path.unlink(missing_ok=True)
         db_path_tmp.unlink(missing_ok=True)
+    _record_identity(config, actual_hex)
     logger.info("fetch_prebuilt wrote db db_file=%s", db_path.name)
     return db_path
 
@@ -328,15 +373,29 @@ def local_build(config: OrphanetDataConfig) -> Path:
         else:
             paths[key] = path
 
+    _drop_identity(config)
     db_path = build_database(config, paths, classification_paths)
     logger.info("local_build complete db_file=%s", db_path.name)
     return db_path
 
 
 def _db_is_valid(config: OrphanetDataConfig) -> bool:
-    """Return True if db_path exists and has the correct schema version."""
+    """Return True if db_path exists, has the right schema, and proves any declared pin.
+
+    A pinned store must also prove its identity here, not only on ``/health``: without
+    it a volume already holding some other release short-circuits the resolver and the
+    wrong data is served with no attempt to correct it.
+    """
     if not config.db_path.exists():
         return False
+    expected = config.expected_data_identity()
+    if expected is not None:
+        try:
+            actual = verify_runtime_identity(config.data_dir, database=config.db_filename)
+        except RuntimeDataIdentityError:
+            return False
+        if actual != expected:
+            return False
     try:
         _check_schema(config.db_path)
         return True
