@@ -1120,7 +1120,7 @@ wheels = [
 
 [[package]]
 name = "orphanet-link"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
