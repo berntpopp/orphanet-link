@@ -53,6 +53,12 @@ services:
       ORPHANET_LINK_LOG_LEVEL: INFO
       ORPHANET_LINK_LOG_FORMAT: json
       ORPHANET_LINK_DATA__DATA_DIR: /data/data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2
+      # The pin the app must PROVE, not fetch: with AUTO_BOOTSTRAP off these two values
+      # are read only by `expected_data_identity()`, which turns /health into the
+      # runtime-v1 readiness gate. Without them /health cannot publish release_identity
+      # and the fleet controller has nothing to bind a deployment record to.
+      ORPHANET_LINK_DATA__RELEASE_TAG: data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2
+      ORPHANET_LINK_DATA__BUNDLE_EXPECTED_SHA256: cc32164c7f64bfb053fabdb2c739ff0236cc039000d3827e7c64160d70dec62f
       ORPHANET_LINK_DATA__AUTO_BOOTSTRAP: "false"
       ORPHANET_LINK_DATA__REFRESH_ENABLED: "false"
       ORPHANET_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","orphanet-link.genefoundry.org"]'

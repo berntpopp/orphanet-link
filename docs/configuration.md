@@ -53,6 +53,20 @@ semantics: [Deployment → Host / Origin / CORS](deployment.md).
 | `DATA__BUNDLE_EXPECTED_SHA256` | unset | Exact SHA-256 for the compressed artifact; production init sidecars require it. |
 | `DATA__AUTO_BOOTSTRAP` | `true` | Ensure the database exists on first use. Set `false` only when managing the database lifecycle externally. |
 
+`DATA__RELEASE_TAG` (immutable, not `latest`) **and** `DATA__BUNDLE_EXPECTED_SHA256`
+together form the deployment's *pin*. Setting both switches on the `runtime-v1` data
+identity contract: the init sidecar records `data-identity.json` beside the database and
+`/health` refuses to report healthy unless the materialized bytes prove exactly that
+pair. Setting neither (development) leaves `/health` a plain liveness probe. See
+[Runtime data identity](deployment.md#runtime-data-identity-runtime-v1).
+
+## Deployed volume selection
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ORPHANET_DATA_VOLUME` | `orphanet-link-npm_orphanet-data` | Physical Docker volume name behind the `orphanet-data` logical volume in `docker/docker-compose.npm.yml`. Read by Compose, not by the application. The fleet controller switches it to activate a candidate volume holding a new data release; the default is the volume live on the server today. |
+| `NPM_SHARED_NETWORK_NAME` | `npm_default` | External proxy network the npm overlay joins. |
+
 See [Data](data.md) for the pipeline these knobs drive.
 
 ## In-process refresh scheduler (advanced; off by default)

@@ -23,7 +23,9 @@ file only highlights the essentials.
   ORPHA code + Orphanet release version.
 - **Definition of done:** `make ci-local` green (format-check, lint-ci, lint-loc
   ≤500 lines/file, mypy strict, tests ≥80% coverage).
-- `structlog` → stderr only; stdout is reserved for the stdio MCP protocol.
+- `structlog` → stderr only; stdout is reserved for the stdio MCP protocol and
+  for `python -m orphanet_link.data_probe`, whose single JSON line is the fleet
+  controller's read-only data observation (see AGENTS.md → Fleet Deploy Contract).
 
 ## Common commands
 

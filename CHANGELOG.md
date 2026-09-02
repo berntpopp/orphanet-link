@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-09-02
+
+### Added
+
+- Adopt the GeneFoundry runtime data identity contract (`runtime-v1`). The
+  `orphanet-data-init` sidecar now writes `data-identity.json` beside the materialized
+  database, recording the release tag, the compressed bundle SHA-256 and the expanded
+  database's size and SHA-256. A pinned deployment re-hashes the database on every
+  `/health` call and publishes `data_available` plus
+  `release_identity: {schema_version: 1, data_identity: {expected, actual}}`, both sides
+  keyed exactly `{release_tag, digest}`; a mismatch answers 503 with
+  `data_available: false` instead of serving whatever is on the volume. Without a pin
+  (`release_tag: latest`, no declared digest) `/health` stays a 200 liveness probe. The
+  resolver applies the same proof, so a volume holding some other release can no longer
+  short-circuit `ensure_database`.
+- `python -m orphanet_link.data_probe` -- the fleet controller's deterministic read-only
+  observation of the live store. One JSON object, exactly
+  `{data_schema_version, record_count, query_result_sha256}`; opens the database
+  `mode=ro&immutable=1`, needs no network, writes nothing, and runs as the container's
+  non-root user.
+
+### Changed
+
+- Name the deployed data volume through `${ORPHANET_DATA_VOLUME:-orphanet-link-npm_orphanet-data}`
+  in `docker/docker-compose.npm.yml`, so the fleet controller can activate a candidate
+  volume holding a new data release. The default is exactly the volume live on the server
+  today, so an unchanged environment renders an unchanged name.
+- Inject the data pin (`DATA__RELEASE_TAG` + `DATA__BUNDLE_EXPECTED_SHA256`) on the
+  *application* service of both production overlays, not only on the init sidecar. The app
+  never fetches with them -- `AUTO_BOOTSTRAP` stays off -- it proves them.
+- Bump the central container-release workflow pin to `genefoundry-router` v0.8.5
+  (`31ea81c`), which gates `docker/docker-compose.npm.yml` against the fleet Compose
+  contract before the image is built and verifies the runtime data identity against the
+  smoke stack's `/health`.
+
 ### Fixed
 
 - Stop requiring a pre-existing release's (or its source tag's) recorded commit to equal
