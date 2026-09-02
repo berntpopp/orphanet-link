@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-09-02
+
+### Added
+
+- Declare `data.schema_compatibility: ["1"]` in `container-release.json`, matching the
+  bare `data_schema_version` `python -m orphanet_link.data_probe` reports
+  (`orphanet_link.constants.SCHEMA_VERSION`). The fleet controller's data attestation
+  requires the attested schema version to be a member of the published manifest's
+  `data_requirements.schema_compatibility`, which stayed `[]` until now.
+
+### Changed
+
+- Bump the reusable release/CI workflow pin to `genefoundry-router` v0.8.6
+  (`3d3cc20477828ddbd8a0c980b5b4f709e2612c02`) in both
+  `.github/workflows/container-release.yml` and `.github/workflows/container-ci.yml` —
+  the revision whose `ExternalReferenceData` model accepts `schema_compatibility`
+  instead of rejecting it as an extra input.
+
 ## [0.4.6] - 2026-09-02
 
 ### Added

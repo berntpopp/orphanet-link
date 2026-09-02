@@ -281,14 +281,15 @@ where the application bootstraps its own data, so the pin reaches it through
 release gate would compare the declared identity against whatever `latest` resolved
 to, and fail — burning a version.
 
-`data.schema_compatibility` is **not** set: `genefoundry-router` v0.8.5's
-`ExternalReferenceData` model (`release/models.py`) is `extra="forbid"` and has no
-such field, so declaring it makes every `container_release.py` command reject the
-file with `invalid_evidence`. The manifest field the fleet controller reads
-(`data_requirements.schema_compatibility`) is fed from `.data.schema_compatibility`
-by `_container-release.yml`, so it stays `[]` until the router model gains the
-field. Add it (value `["1"]`, the version `data_probe` reports) in the same change
-that bumps the workflow pin past that fix.
+`data.schema_compatibility` is set to `["1"]` (as of v0.4.7), the version
+`data_probe` reports (`orphanet_link.constants.SCHEMA_VERSION`). Before `genefoundry-router`
+v0.8.6 the field could not be declared: v0.8.5's `ExternalReferenceData` model
+(`release/models.py`) was `extra="forbid"` and had no such field, so declaring it made
+every `container_release.py` command reject the file with `invalid_evidence`. The
+manifest field the fleet controller reads (`data_requirements.schema_compatibility`) is
+fed from `.data.schema_compatibility` by `_container-release.yml`, and stayed `[]` until
+the workflow pin moved to v0.8.6 (`3d3cc20477828ddbd8a0c980b5b4f709e2612c02`) in the same
+change that added the field, so the router model and the declared value landed together.
 
 The npm overlay's data volume is named
 `${ORPHANET_DATA_VOLUME:-orphanet-link-npm_orphanet-data}` — selectable so the
