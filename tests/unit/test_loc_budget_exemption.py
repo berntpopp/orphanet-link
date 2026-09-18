@@ -17,17 +17,27 @@ Both halves of the partition are asserted, and there is no third bucket.
 
 from __future__ import annotations
 
+import fcntl
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-
-import pytest
 
 from scripts.check_file_size import MAX_LINES, is_vendored
 
-pytestmark = pytest.mark.xdist_group(name="loc_budget")
-
 REPO = Path(__file__).resolve().parents[2]
+
+
+@contextmanager
+def _loc_lock():
+    lock_path = Path(tempfile.gettempdir()) / "orphanet_link_loc_budget.lock"
+    with open(lock_path, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def _write(path: Path, *, lines: int, docstring: str) -> None:
@@ -57,19 +67,37 @@ def test_a_repo_authored_file_in_the_same_directory_is_not_exempt(tmp_path: Path
 
 def test_a_file_outside_the_vendor_directory_cannot_claim_the_exemption(tmp_path: Path) -> None:
     """Saying "vendored" is not enough; it must actually live with the vendored probes."""
-    impostor = REPO / "orphanet_link" / "_loc_budget_impostor.py"
-    try:
-        _write(impostor, lines=10, docstring="Vendored byte-identical from somewhere.")
-        assert not is_vendored(impostor, REPO)
-    finally:
-        impostor.unlink(missing_ok=True)
+    with _loc_lock():
+        impostor = REPO / "orphanet_link" / "_loc_budget_impostor.py"
+        try:
+            _write(impostor, lines=10, docstring="Vendored byte-identical from somewhere.")
+            assert not is_vendored(impostor, REPO)
+        finally:
+            impostor.unlink(missing_ok=True)
 
 
 def test_the_budget_still_fails_on_an_oversized_repo_file() -> None:
     """Prove the guard by breaking it: an oversized non-vendored file must be caught."""
-    offender = REPO / "orphanet_link" / "_loc_budget_offender.py"
-    try:
-        _write(offender, lines=MAX_LINES + 50, docstring="A sprawling module.")
+    with _loc_lock():
+        offender = REPO / "orphanet_link" / "_loc_budget_offender.py"
+        try:
+            _write(offender, lines=MAX_LINES + 50, docstring="A sprawling module.")
+            result = subprocess.run(
+                [sys.executable, "scripts/check_file_size.py"],
+                cwd=REPO,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 1, "an oversized repo file must fail the budget"
+            assert "_loc_budget_offender.py" in result.stdout
+        finally:
+            offender.unlink(missing_ok=True)
+
+
+def test_the_budget_passes_on_the_real_tree() -> None:
+    """And with only the vendored probe over the cap, the tree is clean."""
+    with _loc_lock():
         result = subprocess.run(
             [sys.executable, "scripts/check_file_size.py"],
             cwd=REPO,
@@ -77,20 +105,5 @@ def test_the_budget_still_fails_on_an_oversized_repo_file() -> None:
             text=True,
             check=False,
         )
-        assert result.returncode == 1, "an oversized repo file must fail the budget"
-        assert "_loc_budget_offender.py" in result.stdout
-    finally:
-        offender.unlink(missing_ok=True)
-
-
-def test_the_budget_passes_on_the_real_tree() -> None:
-    """And with only the vendored probe over the cap, the tree is clean."""
-    result = subprocess.run(
-        [sys.executable, "scripts/check_file_size.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout
-    assert "vendored file(s) exempt" in result.stdout
+        assert result.returncode == 0, result.stdout
+        assert "vendored file(s) exempt" in result.stdout

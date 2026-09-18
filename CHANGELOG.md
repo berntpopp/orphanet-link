@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-09-18
+
+### Changed
+
+- Bump dependencies: `typer>=0.27.2`, `pydantic>=2.13.5`, `orjson>=3.12.0`, `lxml>=6.1.3`, `ruff>=0.16.8`.
+- Bump reusable workflow pin to `genefoundry-router` v0.9.1 (`adfc1cffed6530d6453c9dbb40be5f4c5884b8a2`).
+- Bump GitHub Actions pins: `setup-uv` to v10.1.0, `codeql-action` to v4.38.0, `upload-artifact` to v4.6.1, `download-artifact` to v4.1.9, `attest-build-provenance` to v3.1.0.
+- Configure Dependabot dependency groups for `uv` and `github-actions`.
+
 ## [0.4.7] - 2026-09-02
 
 ### Added
