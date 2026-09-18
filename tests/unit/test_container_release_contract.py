@@ -16,9 +16,8 @@ WORKFLOW = ROOT / ".github" / "workflows" / "container-release.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "container-ci.yml"
 MANIFEST = ROOT / "container-release.json"
 
-# genefoundry-router v0.8.6: the first revision whose `ExternalReferenceData` release
-# model accepts `data.schema_compatibility` instead of rejecting it as an extra input.
-ROUTER_WORKFLOW_SHA = "3d3cc20477828ddbd8a0c980b5b4f709e2612c02"
+# genefoundry-router v0.9.1
+ROUTER_WORKFLOW_SHA = "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
 RUNTIME_CAPABLE_RELEASE_BUILDER = (
     f"berntpopp/genefoundry-router/.github/workflows/_container-release.yml@{ROUTER_WORKFLOW_SHA}"
 )
