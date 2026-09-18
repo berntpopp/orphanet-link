@@ -391,7 +391,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Upload verified release package
         if: steps.release_state.outputs.state == 'create' || steps.release_state.outputs.state == 'draft_publish_existing'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: orphanet-release-assets
           path: ${{ runner.temp }}/orphanet-release-handoff
@@ -419,7 +419,7 @@ jobs:
       attestations: write
     steps:
       - name: Download exact verified release package
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: orphanet-release-assets
           path: release-package
@@ -554,7 +554,7 @@ jobs:
 
       - name: Attest the exact release subject
         if: needs.build-and-verify.outputs.state == 'create' || needs.build-and-verify.outputs.state == 'draft_publish_existing'
-        uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
+        uses: actions/attest-build-provenance@cb9b3a436573c9f220359fbe94191d8e13bb2f35 # v3.1.0
         with:
           subject-path: release-package/assets/orphanet.sqlite.gz
 
