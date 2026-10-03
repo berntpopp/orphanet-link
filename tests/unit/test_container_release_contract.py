@@ -17,7 +17,7 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "container-ci.yml"
 MANIFEST = ROOT / "container-release.json"
 
 # genefoundry-router v0.9.1
-ROUTER_WORKFLOW_SHA = "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
+ROUTER_WORKFLOW_SHA = "0122f6e6d8f6a9057b80134d7cacbf61c5bd2e84"
 RUNTIME_CAPABLE_RELEASE_BUILDER = (
     f"berntpopp/genefoundry-router/.github/workflows/_container-release.yml@{ROUTER_WORKFLOW_SHA}"
 )
