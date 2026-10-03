@@ -1,15 +1,14 @@
 # Changelog
 
-## [{v}] - 2026-10-03
-
-- Update FastAPI and pytest-mock to the current dependency releases.
-
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-10-03
+
+- Update FastAPI and pytest-mock to the current dependency releases.
 
 ## [0.4.9] - 2026-10-03
 
