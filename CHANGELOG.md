@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-10-20
+
+### Security
+
+- Fix Dependabot alert on `mcp` (medium): raise the floor to `mcp[cli]>=1.30.0` and lock `mcp` 1.30.0.
+
+### Changed
+
+- Bump Python dependencies: `fastapi`, `pydantic`, `pydantic-core`, `pydantic-settings`, `orjson`, `typer`, `typing-inspection`, `ruff`, `mypy`, `librt`, `ast-serialize`.
+- Bump GitHub Actions pins: `setup-uv` to v10.3.0, `upload-artifact` to v7.0.2, `download-artifact` to v8.0.2, `codeql-action` to v4.38.3.
+- Bump reusable workflow pin to `genefoundry-router` v0.10.4 (`88b565f1b6047f47fd58138cbf041994bb137c03`).
+
 ## [0.4.10] - 2026-10-03
 
 - Update FastAPI and pytest-mock to the current dependency releases.
