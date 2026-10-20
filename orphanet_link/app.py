@@ -47,7 +47,7 @@ def _data_readiness(config: OrphanetDataConfig) -> tuple[bool, dict[str, Any] | 
         return config.db_path.is_file(), None
     try:
         actual = verify_runtime_identity(config.data_dir, database=config.db_filename)
-    except (OSError, RuntimeDataIdentityError):
+    except OSError, RuntimeDataIdentityError:
         return False, None
     if actual != expected:
         return False, None
@@ -58,7 +58,7 @@ def _data_readiness(config: OrphanetDataConfig) -> tuple[bool, dict[str, Any] | 
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Bootstrap the Orphanet index and (optionally) start the refresh scheduler."""
     logger = configure_logging()
     logger.info("orphanet-link starting", host=settings.host, port=settings.port)

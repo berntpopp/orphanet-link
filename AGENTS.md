@@ -345,7 +345,7 @@ A piece of work is done when ALL of the following are true:
 
 ## Conventions
 
-- Python 3.12+, `uv`, hatchling. Add deps via `pyproject.toml`, then `uv lock`.
+- Python 3.14+, `uv`, hatchling. Add deps via `pyproject.toml`, then `uv lock`.
 - Ruff: line length 100, Google-style docstrings.
 - TDD: write the failing test first. Keep unit tests self-contained; build a
   fixture SQLite from `tests/fixtures/` mini-XML samples.

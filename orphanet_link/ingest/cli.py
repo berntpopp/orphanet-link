@@ -66,7 +66,7 @@ def _read_meta(db_path: Path) -> _MetaRow | None:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM meta WHERE id=1").fetchone()
         conn.close()
-    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+    except sqlite3.OperationalError, sqlite3.DatabaseError:
         return None
     if row is None:
         return None

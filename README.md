@@ -1,6 +1,6 @@
 # orphanet-link
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://github.com/berntpopp/orphanet-link/actions/workflows/ci.yml/badge.svg)](https://github.com/berntpopp/orphanet-link/actions/workflows/ci.yml)
 [![Conformance](https://github.com/berntpopp/orphanet-link/actions/workflows/conformance.yml/badge.svg)](https://github.com/berntpopp/orphanet-link/actions/workflows/conformance.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -37,7 +37,7 @@ The GeneFoundry instance is hosted — no install:
 claude mcp add --transport http orphanet-link https://orphanet-link.genefoundry.org/mcp
 ```
 
-Locally (Python 3.12+ and [uv](https://docs.astral.sh/uv/)):
+Locally (Python 3.14+ and [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 git clone https://github.com/berntpopp/orphanet-link.git
