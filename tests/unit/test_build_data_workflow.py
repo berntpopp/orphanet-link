@@ -383,7 +383,7 @@ def test_publisher_is_trusted_and_can_generate_provenance() -> None:
     steps = publish["steps"]  # type: ignore[index]
     assert any(
         step.get("uses")
-        == "actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8"
+        == "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
         for step in steps
     )
     scripts = "\n".join(_run_blocks({"jobs": {"publish": publish}}))
