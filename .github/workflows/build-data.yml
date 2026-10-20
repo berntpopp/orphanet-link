@@ -554,7 +554,7 @@ jobs:
 
       - name: Attest the exact release subject
         if: needs.build-and-verify.outputs.state == 'create' || needs.build-and-verify.outputs.state == 'draft_publish_existing'
-        uses: actions/attest-build-provenance@cb9b3a436573c9f220359fbe94191d8e13bb2f35 # v3.1.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-path: release-package/assets/orphanet.sqlite.gz
 
