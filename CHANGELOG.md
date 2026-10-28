@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-10-28
+
+### Fixed
+
+- Re-release of 0.4.13: pin the router reusable workflows to genefoundry-router v0.10.10, whose
+  refreshed control ledger lets the container release pass "Enforce fleet release controls" (0.4.13 was
+  tagged but never published).
+
 ## [0.4.13] - 2026-10-28
 
 ### Security
