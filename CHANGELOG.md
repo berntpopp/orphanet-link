@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-10-28
+
+### Security
+
+- Authlib 1.9.1 (CVE-2026-96760 critical, CVE-2026-114615/114616 high) and dnspython 2.9.0
+  (CVE-2026-114605 high); both transitive, lock-only bump.
+
 ## [0.4.12] - 2026-10-20
 
 ### Security
