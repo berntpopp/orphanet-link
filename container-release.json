@@ -35,6 +35,10 @@
     "image_allowlist": [
       "home/app/web/orphanet_link/data/__init__.py",
       "home/app/web/orphanet_link/data/repository.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/__init__.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdataabc.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdatacode.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdataerror.py",
       "opt/venv/lib/python3.14/site-packages/orphanet_link/data/__init__.py",
       "opt/venv/lib/python3.14/site-packages/orphanet_link/data/repository.py"
     ]

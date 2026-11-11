@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-11-11
+
+### Security
+- Bump fastmcp / fastmcp-slim to 3.4.11 (floor >=3.4.10) and opentelemetry-api to 1.45.2 (Dependabot alerts 19, 20, 21).
+
+### Changed
+- Full `uv lock --upgrade`; GitHub Actions pins bumped (setup-python v7.1.0, setup-uv v10.3.3, codeql-action v4.39.1).
+
 ## [0.4.14] - 2026-10-28
 
 ### Fixed
