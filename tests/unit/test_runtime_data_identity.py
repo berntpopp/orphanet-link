@@ -30,8 +30,8 @@ from orphanet_link.runtime_data_identity import (
 )
 from orphanet_link.services.data_resolver import _db_is_valid, _record_identity
 
-RELEASE_TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2"
-BUNDLE_SHA256 = "cc32164c7f64bfb053fabdb2c739ff0236cc039000d3827e7c64160d70dec62f"
+RELEASE_TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r3"
+BUNDLE_SHA256 = "addfc21982fa5d795db73a823ea5ae7fb5fbd181766dc212e2953745f4c7ce0d"
 DB_FILENAME = "orphanet.sqlite"
 
 

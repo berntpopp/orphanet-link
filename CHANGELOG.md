@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-11-12
+
+### Changed
+- Re-pin the production data release from `-r2` to `-r3` (same upstream snapshot, deterministic
+  pipeline rebuild; bundle `addfc219...`, expanded SQLite `580403ff...`). Operator-approved.
+
 ## [0.4.15] - 2026-11-11
 
 ### Security
