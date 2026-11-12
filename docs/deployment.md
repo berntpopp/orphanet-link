@@ -48,10 +48,10 @@ complete successfully, mounts its versioned read-only snapshot, and has no
 in-process bootstrap path or write access to the data volume.
 
 The current production data pin is
-`data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2` with compressed bundle
-digest `sha256:cc32164c7f64bfb053fabdb2c739ff0236cc039000d3827e7c64160d70dec62f`.
+`data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r3` with compressed bundle
+digest `sha256:addfc21982fa5d795db73a823ea5ae7fb5fbd181766dc212e2953745f4c7ce0d`.
 The expanded SQLite digest is
-`sha256:d7408be62d055700901e635c1582c3ccdf5245e87b88f53c90f8fbdb2f284a53`.
+`sha256:580403ff41de089250b2ad0f7e1aadb4079d349518873d69b52cafb34a3c2af6`.
 See [Data](data.md#current-audited-production-snapshot) for the complete
 release-asset identity set.
 

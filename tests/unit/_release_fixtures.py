@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r2"
+TAG = "data-1.3.42-4.1.8-2025-03-03-r20260623T075350Z-r3"
 REPO = "berntpopp/orphanet-link"
 TEST_TOKEN = "test"  # noqa: S105 - controlled mock credential
 
