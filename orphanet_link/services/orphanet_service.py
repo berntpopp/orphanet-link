@@ -200,16 +200,16 @@ class OrphanetService:
         resolved = resolve(self.repo, term)
         code = resolved["orpha_code"]
         genes = self.repo.get_genes(code)
-        return shape(
-            {
-                "orpha_code": code,
-                "name": resolved["name"],
-                "genes": genes,
-                "count": len(genes),
-                "orphanet_version": self._orphanet_version(),
-            },
-            response_mode,
-        )
+        payload = {
+            "orpha_code": code,
+            "name": resolved["name"],
+            "genes": genes,
+            "count": len(genes),
+        }
+        # Group term: genes sit on subtypes. Say so, but never fold them into `count`.
+        if not genes and (n := self.repo.get_descendants(code, limit=1)["total"]):
+            payload.update(descendant_count=n, note="Group term: genes are annotated on subtypes.")
+        return shape({**payload, "orphanet_version": self._orphanet_version()}, response_mode)
 
     def get_disease_phenotypes(
         self, term: str, frequency: str | None = None, response_mode: str = DEFAULT_RESPONSE_MODE

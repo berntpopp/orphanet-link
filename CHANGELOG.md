@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
+### Added
+
+- `get_disease_genes` on a group term with no direct gene rows now returns `descendant_count` and a `note`, and `_meta.next_commands` leads with `get_disease_descendants`. `count` stays the direct-gene count; subtype genes are never folded in (#132).
+- `get_server_capabilities` reports `orphanet_date`, the Orphadata file date. `orphanet_version` is the Orphadata schema/JDBOR version string and does not change between releases (#132).
+
 ## [0.5.0] - 2026-11-18
 
 ### Changed

@@ -241,10 +241,10 @@ def after_genes(payload: dict[str, Any]) -> list[dict[str, Any]]:
     term_id = _get_term_id(payload)
     if not term_id:
         return [cmd("get_server_capabilities")]
-    return [
-        cmd("get_disease_phenotypes", term=term_id),
-        cmd("map_cross_ontology", term=term_id),
-    ]
+    steps = [cmd("get_disease_phenotypes", term=term_id), cmd("map_cross_ontology", term=term_id)]
+    if payload.get("descendant_count"):
+        steps.insert(0, cmd("get_disease_descendants", term=term_id))
+    return steps
 
 
 def after_phenotypes(payload: dict[str, Any]) -> list[dict[str, Any]]:
