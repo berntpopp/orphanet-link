@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
+### Changed
+
+- Upgrade FastMCP 3.4 → 4.2.2 and MCP SDK 1.x → 2.x; supports the 2026-07-28 sessionless protocol era alongside the legacy handshake.
+- Not-found reflection guard Layer 3 ported to the SDK 2 request-handler API; resource/prompt dispatch failures keep JSON-RPC code -32602.
+
+### Security
+
+- Strip the caller-supplied method name SDK 2 echoes in METHOD_NOT_FOUND `data` (both protocol eras); scrub `mcp.server.runner` dropped-frame / unknown-notification logs.
+
 ## [0.4.17] - 2026-11-13
 
 ### Changed

@@ -41,6 +41,8 @@ def configure_stdlib_logging() -> None:
     is_debug = settings.log_level == "DEBUG"
     for name, level in {
         "httpx": "WARNING",
+        "httpx2": "WARNING",
+        "httpcore2": "WARNING",
         "httpcore": "WARNING",
         "uvicorn.access": "INFO" if is_debug else "WARNING",
         "uvicorn.error": "INFO",

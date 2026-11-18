@@ -34,7 +34,7 @@ from typing import Any
 
 import pytest
 from fastmcp import FastMCP
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from orphanet_link.exceptions import NotFoundError
 from orphanet_link.mcp.envelope import McpErrorContext, run_mcp_tool

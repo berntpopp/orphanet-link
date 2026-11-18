@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 
 def envelope(result: Any) -> dict[str, Any]:

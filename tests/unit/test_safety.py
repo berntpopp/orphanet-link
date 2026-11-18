@@ -51,9 +51,9 @@ async def test_every_tool_is_read_only_open_world(facade: FastMCP) -> None:
     for tool in tools:
         annotations = tool.annotations
         assert annotations is not None, f"{tool.name} has no annotations"
-        assert annotations.readOnlyHint is True, f"{tool.name} not readOnly"
-        assert annotations.destructiveHint is False, f"{tool.name} is destructive"
-        assert annotations.openWorldHint is True, f"{tool.name} not openWorld"
+        assert annotations.read_only_hint is True, f"{tool.name} not readOnly"
+        assert annotations.destructive_hint is False, f"{tool.name} is destructive"
+        assert annotations.open_world_hint is True, f"{tool.name} not openWorld"
 
 
 # ---------------------------------------------------------------------------
