@@ -1,6 +1,6 @@
 """FastMCP-core not-found reflection guard, driven through the REAL MCP surface.
 
-FastMCP core (pinned >=3.4.4,<4.0.0) reflects the caller's OWN requested tool
+FastMCP core (pinned >=4.2.2,<5.0.0) reflects the caller's OWN requested tool
 name / resource URI / prompt name back to the caller (and to logs) BEFORE any
 backend middleware runs. Confirmed on orphanet-link's pristine main (probe):
 
@@ -38,7 +38,7 @@ from fastmcp import Client
 from fastmcp.exceptions import ResourceError, ToolError
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.shared.message import SessionMessage
-from mcp.types import INVALID_PARAMS, JSONRPCMessage, JSONRPCRequest
+from mcp.types import INVALID_PARAMS, JSONRPCRequest
 
 from orphanet_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS
 
@@ -227,6 +227,7 @@ async def test_unknown_prompt_no_reflection_to_caller_or_logs(facade) -> None:
             with pytest.raises(Exception) as excinfo:
                 await client.get_prompt(HOSTILE_PROMPT_NAME, {})
     _assert_clean_text(str(excinfo.value), where="prompt-exc")
+    assert getattr(excinfo.value, "code", None) == INVALID_PARAMS
     _assert_logs_clean(logs)
 
 
@@ -258,11 +259,22 @@ async def test_malformed_uri_real_request_frame_and_logs_are_clean(facade) -> No
                         server_read,
                         server_write,
                         init_options,
-                        stateless=True,  # start Initialized: skip the handshake
                         raise_exceptions=False,
                     )
 
                 task_group.start_soon(_run)
+                # SDK v2 dropped ``run(stateless=True)``: do the legacy handshake first.
+                init = JSONRPCRequest(
+                    jsonrpc="2.0",
+                    id=0,
+                    method="initialize",
+                    params={
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": {"name": "probe", "version": "0"},
+                    },
+                )
+                await client_write.send(SessionMessage(message=init))
                 # The malformed URI is a plain string in params, so it bypasses
                 # AnyUrl validation until the session model_validates it into a
                 # ClientRequest -- reproducing the real -32602 + log path.
@@ -272,13 +284,13 @@ async def test_malformed_uri_real_request_frame_and_logs_are_clean(facade) -> No
                     method="resources/read",
                     params={"uri": HOSTILE_MALFORMED_URI},
                 )
-                await client_write.send(SessionMessage(message=JSONRPCMessage(request)))
+                await client_write.send(SessionMessage(message=request))
                 with anyio.fail_after(5):
-                    for _ in range(5):
+                    for _ in range(8):
                         message = await client_read.receive()
                         if isinstance(message, Exception):
                             raise message
-                        candidate = message.message.root
+                        candidate = message.message  # SDK v2: plain union
                         if isinstance(candidate, mcp_types.JSONRPCError):
                             root = candidate
                             break
