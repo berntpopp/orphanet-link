@@ -45,6 +45,8 @@ def register_association_tools(mcp: FastMCP) -> None:
             "Return gene-disease associations for an Orphanet disorder: gene symbol, "
             "HGNC id, association type, and cross-references (OMIM, Ensembl, etc.). "
             "count is the number of leaf gene rows, not grouped associations. "
+            "A group term with no direct genes returns count 0 plus descendant_count; "
+            "call get_disease_descendants and query the subtypes. "
             "Signature: get_disease_genes(term, response_mode=)."
         ),
     )

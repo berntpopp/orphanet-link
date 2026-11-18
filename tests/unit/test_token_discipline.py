@@ -109,6 +109,8 @@ async def test_discovery_tools_keep_version_string_in_compact(facade: FastMCP) -
     assert diag.get("orphanet_version")
     caps = await _call(facade, "get_server_capabilities")
     assert caps.get("orphanet_version")
+    # Issue #132: the file date (release), not just the schema version string.
+    assert caps.get("orphanet_date") == diag.get("orphanet_date")
 
 
 async def test_non_shaped_tools_also_drop_version_in_compact(facade: FastMCP) -> None:

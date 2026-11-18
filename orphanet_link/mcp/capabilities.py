@@ -65,6 +65,7 @@ _SUMMARY_KEYS: tuple[str, ...] = (
     "build",
     "capabilities_version",
     "orphanet_version",
+    "orphanet_date",
     "data_source",
     "research_use_only",
     "research_use_notice",
@@ -92,13 +93,17 @@ _HASH_EXCLUDE: frozenset[str] = frozenset({"build", "capabilities_version"})
 _VERSION_CACHE: dict[str, str] = {}
 
 
-def _orphanet_version() -> str | None:
-    """Best-effort loaded Orphanet release (never raises, never forces a build)."""
+def _diag() -> dict[str, Any]:
+    """Best-effort diagnostics (never raises, never forces a build)."""
     try:
-        diag = get_orphanet_service().get_diagnostics()
+        return get_orphanet_service().get_diagnostics()
     except Exception:  # pragma: no cover - discovery must never fail on data
-        return None
-    return diag.get("orphanet_version")
+        return {}
+
+
+def _orphanet_version() -> str | None:
+    """Best-effort loaded Orphanet release string (Orphadata schema version)."""
+    return _diag().get("orphanet_version")
 
 
 def _hash_contract(payload: dict[str, Any]) -> str:
@@ -152,6 +157,8 @@ def build_capabilities() -> dict[str, Any]:
         "server_version": __version__,
         "build": build_info(),
         "orphanet_version": _orphanet_version(),
+        # orphanet_version is the Orphadata schema string; the file date is the release.
+        "orphanet_date": _diag().get("orphanet_date"),
         "data_source": (
             "Local SQLite index built from Orphadata XML releases "
             "(sciences.orphadata.com). Data from Orphanet / INSERM."
@@ -248,7 +255,8 @@ def build_capabilities() -> dict[str, Any]:
         ),
         "recommended_workflows": [
             "label/id/xref -> resolve_disease -> get_disease",
-            "term -> get_disease_genes (gene-disease associations)",
+            "term -> get_disease_genes (gene-disease associations; a group term with "
+            "descendant_count -> get_disease_descendants, then genes per subtype)",
             "term -> get_disease_phenotypes (HPO phenotypes)",
             "term -> get_disease_prevalence / get_disease_natural_history / get_disease_disability",
             "gene symbol -> find_diseases_by_gene",

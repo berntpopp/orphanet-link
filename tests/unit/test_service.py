@@ -341,3 +341,18 @@ def test_find_diseases_by_phenotype_normalizes_hpo_prefix(svc):
     codes = [r["orpha_code"] for r in result["results"]]
     assert "58" in codes
     assert result["hpo_id"] == "HP:0000256"
+
+
+def test_get_disease_genes_group_term_points_to_subtypes(svc, monkeypatch):
+    # Issue #132: a group term has no direct genes; its subtypes do.
+    from orphanet_link.mcp.next_commands import after_genes
+
+    monkeypatch.setattr(svc.repo, "get_genes", lambda code: [])
+    monkeypatch.setattr(svc.repo, "get_descendants", lambda code, limit: {"total": 3})
+    result = svc.get_disease_genes("ORPHA:58")
+    assert result["count"] == 0 and not result.get("genes")
+    assert result["descendant_count"] == 3 and "subtypes" in result["note"]
+    assert after_genes(result)[0] == {
+        "tool": "get_disease_descendants",
+        "arguments": {"term": "58"},
+    }
