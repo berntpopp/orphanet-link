@@ -109,6 +109,13 @@ async def test_search_diseases_returns_results(facade: FastMCP) -> None:
     assert isinstance(result["_meta"]["next_commands"], list)
 
 
+async def test_search_diseases_returns_fields_its_description_names(facade: FastMCP) -> None:
+    result = await _call(facade, "search_diseases", query="Alexander")
+    assert result["results"], "fixture must yield a hit"
+    assert {"orpha_code", "name", "score"} <= set(result["results"][0])
+    assert {"total", "returned", "limit", "offset", "truncated"} <= set(result)
+
+
 # ---------------------------------------------------------------------------
 # Association tools
 # ---------------------------------------------------------------------------

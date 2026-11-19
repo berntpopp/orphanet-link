@@ -70,8 +70,8 @@ def register_disease_tools(mcp: FastMCP) -> None:
         tags={"disease", "search"},
         description=(
             "Full-text search over Orphanet disease names, synonyms, and definitions "
-            "(FTS, relevance-ranked). Returns {orpha_code, name, score} plus a "
-            "pagination block {total, returned, limit, offset, truncated, next_offset}. "
+            "(FTS, relevance-ranked); returns {orpha_code, name, score} plus top-level "
+            "pagination fields {total, returned, limit, offset, truncated, next_offset}. "
             "When truncated, next_commands carries a forward-page step. Obsolete terms "
             "are excluded unless include_obsolete=true. "
             "Signature: search_diseases(query, limit=, offset=, include_obsolete=, response_mode=)."
