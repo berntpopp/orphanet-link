@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "orphanet-link"
-version = "0.6.1"
+version = "0.6.2"
 description = "MCP/API server that grounds rare-disease work in Orphanet scientific knowledge files"
 readme = "README.md"
 license = { text = "MIT" }

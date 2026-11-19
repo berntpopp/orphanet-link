@@ -120,8 +120,9 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
             candidates=candidates,
         )
     raise NotFoundError(
-        f"No Orphanet disorder matches '{raw}'. "
-        "Try an ORPHAcode (ORPHA:NNN), a disease label, or a cross-reference CURIE."
+        # Fixed message: the query is never echoed (Response-Envelope §2a).
+        "No Orphanet disorder matches the query. Try an ORPHAcode (ORPHA:NNN), a disease "
+        "label, a cross-reference CURIE, or mondo_resolve_disease for a MONDO id."
     )
 
 

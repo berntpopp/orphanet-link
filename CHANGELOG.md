@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-19
+
+### Fixed
+
+- `resolve_disease` free-text misses now chain to Mondo, the fleet's disease front door
+  (#137, Response-Envelope §2a): `_meta.next_commands` adds
+  `mondo_resolve_disease(query=<same text>)` after `search_diseases` (also on a
+  cross-reference CURIE miss, which Mondo may map). The `not_found`
+  message is now fixed and server-authored (it no longer echoes the query).
+
 ## [0.6.1] - 2026-11-19
 
 ### Changed
