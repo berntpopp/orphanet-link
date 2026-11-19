@@ -75,10 +75,12 @@ def default_error_next_commands(
     ):
         value = str(arguments.get("term", "") or arguments.get("query", ""))
         prefix, _ = parse_curie(value)
+        # Sibling disease front door, namespaced: the router passes it through (§2a).
+        mondo = [cmd("mondo_resolve_disease", query=value)] if tool == "resolve_disease" else []
         if prefix is not None:
-            return [cmd("resolve_xref", xref_id=value), cmd("search_diseases", query=value)]
+            return [cmd("resolve_xref", xref_id=value), cmd("search_diseases", query=value), *mondo]
         if value and not is_orpha_code(value):
-            return [cmd("search_diseases", query=value), cmd("get_server_capabilities")]
+            return [cmd("search_diseases", query=value), *mondo, cmd("get_server_capabilities")]
     if tool == "resolve_xref":
         value = str(arguments.get("xref_id", ""))
         return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
