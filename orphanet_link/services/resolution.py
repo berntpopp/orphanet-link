@@ -57,7 +57,7 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
                 "name": record["name"],
                 "match_type": "orpha_code",
             }
-        if raw.isdigit():
+        if raw.isascii() and raw.isdigit():
             raise NotFoundError(
                 f"No Orphanet disorder for ORPHA:{code}: a bare number is read as an "
                 f"ORPHAcode. If it is an OMIM number, send OMIM:{code}."
@@ -161,6 +161,13 @@ def resolve_gene(repo: OrphanetRepository, raw: str) -> tuple[str, dict[str, str
     symbols = repo.gene_symbols(column, value) if column else []
     if len(symbols) == 1:
         return symbols[0], {"input": raw, "form": form, "resolved_to": symbols[0]}
+    if len(symbols) > 1:
+        raise InvalidInputError(
+            f"gene_symbol is a {form} that {len(symbols)} Orphanet genes carry; pick one.",
+            field="gene_symbol",
+            allowed=sorted(symbols),
+            hint="Send one of the gene symbols in allowed_values.",
+        )
     if form == "uniprot_accession":
         # ponytail: the shape collides with real symbols (P2RY13, B3GAT1), so an
         # unmatched one stays a symbol lookup; reject it once symbols are validated.

@@ -24,6 +24,9 @@ async def _call(facade: FastMCP, name: str, **kwargs: Any) -> dict[str, Any]:
     [
         ("HGNC:30497", "hgnc_id"),
         ("hgnc:30497", "hgnc_id"),
+        ("HGNC: 30497", "hgnc_id"),
+        ("HGNC_30497", "hgnc_id"),
+        ("Q2M1P5-2", "uniprot_accession"),
         ("ENSG00000166813", "ensembl_gene_id"),
         ("ENSG00000166813.12", "ensembl_gene_id"),
         ("Q2M1P5", "uniprot_accession"),
@@ -136,3 +139,39 @@ async def test_single_item_tools_name_their_batch_sibling(facade: FastMCP) -> No
     assert "call resolve_disease_batch once instead" in tools["resolve_disease"]
     assert "call get_disease_batch once instead" in tools["get_disease"]
     assert "OMIM:" in tools["resolve_disease"] and "MONDO:" in tools["resolve_disease"]
+
+
+async def test_uniprot_accession_on_two_gene_rows_asks_for_one_symbol(
+    facade: FastMCP, repo: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Real index: Q16637 is on both SMN1 and SMN2.
+    monkeypatch.setattr(
+        repo, "gene_symbols", lambda col, _v: ["SMN2", "SMN1"] if col == "swissprot_id" else []
+    )
+    result = await _call(facade, "find_diseases_by_gene", gene_symbol="Q16637")
+    assert result["success"] is False and result["error_code"] == "invalid_input"
+    assert result["field"] == "gene_symbol"
+    assert result["allowed_values"] == ["SMN1", "SMN2"] and result["hint"]
+
+
+@pytest.mark.parametrize("value", ["A0A024R161", "B3GAT1"])
+async def test_unmatched_uniprot_shape_is_empty_but_points_at_hgnc(
+    facade: FastMCP, value: str
+) -> None:
+    result = await _call(facade, "find_diseases_by_gene", gene_symbol=value)
+    assert result["success"] is True and result["total"] == 0
+    assert result["_meta"]["next_commands"][0] == {
+        "tool": "hgnc_resolve_symbol",
+        "arguments": {"query": value},
+    }
+
+
+async def test_long_bare_number_gets_no_omim_offer(facade: FastMCP) -> None:
+    result = await _call(facade, "resolve_disease", query="123456789")
+    assert result["success"] is False
+    assert "OMIM:" not in str(result["_meta"]["next_commands"])
+
+
+def test_non_latin_digits_are_not_a_gene_id() -> None:
+    assert classify_gene_id("\u0661\u0662\u0663") is None
+    assert classify_gene_id("HGNC:\u0661\u0662") is None

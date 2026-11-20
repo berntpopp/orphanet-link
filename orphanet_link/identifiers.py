@@ -35,14 +35,18 @@ _KNOWN_PREFIXES = {
 #: Gene identifier forms that are not HGNC symbols, tried in order. Group 1 is the value
 #: as Orphanet stores it (bare HGNC number, unversioned Ensembl gene id).
 _GENE_ID_FORMS = (
-    ("hgnc_id", re.compile(r"HGNC:(\d+)", re.IGNORECASE)),
-    ("ensembl_gene_id", re.compile(r"(ENSG\d{11})(?:\.\d+)?", re.IGNORECASE)),
-    ("ensembl_transcript_or_protein_id", re.compile(r"(ENS[TP]\d{11}(?:\.\d+)?)", re.I)),
-    ("refseq_accession", re.compile(r"([NX][MRP]_\d+(?:\.\d+)?)", re.IGNORECASE)),
-    ("ncbi_gene_id", re.compile(r"(?:(?:NCBIGene|GeneID|Entrez)\s*:\s*)?(\d+)", re.IGNORECASE)),
-    (
+    # [0-9], not \d: \d also matches non-Latin digits, which no identifier here uses.
+    ("hgnc_id", re.compile(r"HGNC\s*[:_]?\s*([0-9]+)", re.IGNORECASE)),
+    ("ensembl_gene_id", re.compile(r"(ENSG[0-9]{11})(?:\.[0-9]+)?", re.IGNORECASE)),
+    ("ensembl_transcript_or_protein_id", re.compile(r"(ENS[TP][0-9]{11}(?:\.[0-9]+)?)", re.I)),
+    ("refseq_accession", re.compile(r"([NX][MRP]_[0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("ncbi_gene_id", re.compile(r"(?:(?:NCBIGene|GeneID|Entrez)\s*:\s*)?([0-9]+)", re.I)),
+    (  # group 1 is the base accession; an isoform suffix (-2) is dropped
         "uniprot_accession",
-        re.compile(r"([OPQ]\d[A-Z\d]{3}\d|[A-NR-Z]\d(?:[A-Z][A-Z\d]{2}\d){1,2})", re.I),
+        re.compile(
+            r"([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-[0-9]+)?",
+            re.IGNORECASE,
+        ),
     ),
 )
 

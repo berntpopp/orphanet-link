@@ -7,6 +7,7 @@ chainers steer the success path (resolve -> record -> hierarchy -> cross-ontolog
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from orphanet_link.identifiers import classify_gene_id, is_orpha_code, parse_curie
@@ -74,8 +75,9 @@ def default_error_next_commands(
         "get_disease_classification",
     ):
         value = str(arguments.get("term", "") or arguments.get("query", ""))
-        if error_code == "not_found" and value.strip().isdigit():
-            # A bare number was read as an ORPHAcode; the usual other meaning is OMIM.
+        if error_code == "not_found" and re.fullmatch(r"[0-9]{1,7}", value.strip()):
+            # A bare number was read as an ORPHAcode; the usual other meaning is OMIM
+            # (MIM numbers have six digits, so a longer number gets no such offer).
             key = "query" if tool == "resolve_disease" else "term"
             return [cmd(tool, **{key: f"OMIM:{value.strip()}"})]
         prefix, _ = parse_curie(value)
@@ -283,6 +285,10 @@ def after_find_by(payload: dict[str, Any], lookup_key: str) -> list[dict[str, An
     """After a find_diseases_by_* tool: open the top hit."""
     hits = payload.get("results", [])
     if not hits:
+        value = str(payload.get("gene_symbol", ""))
+        if (classify_gene_id(value) or ("", ""))[0] == "uniprot_accession":
+            # Unmatched UniProt shape: maybe a symbol, maybe an accession Orphanet lacks.
+            return [cmd("hgnc_resolve_symbol", query=value), cmd("get_server_capabilities")]
         return [cmd("get_server_capabilities")]
     steps: list[dict[str, Any]] = []
     top = _get_term_id(hits[0])

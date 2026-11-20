@@ -13,7 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `find_diseases_by_gene` accepts an HGNC id (`HGNC:6407`) or an Ensembl gene id
   (`ENSG00000133703`, version suffix ignored), matched on Orphanet's own gene
   cross-references and echoed as `resolved_from: {input, form, resolved_to}`. A UniProt
-  accession that exactly one Orphanet gene row carries resolves the same way
+  accession that exactly one Orphanet gene row carries resolves the same way; one that
+  several rows carry returns `invalid_input` with the candidate symbols in `allowed_values`
   (genefoundry-router #343, Response-Envelope §2b).
 
 ### Fixed
