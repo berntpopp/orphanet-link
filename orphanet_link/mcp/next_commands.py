@@ -94,6 +94,8 @@ def default_error_next_commands(
             # A gene id Orphanet cannot match: hgnc-link converts it to the symbol.
             if classified[0] == "ncbi_gene_id":
                 return [cmd("hgnc_resolve_gene_by_xref", source="entrez_id", value=classified[1])]
+            if classified[0] == "ensembl_transcript_or_protein_id":
+                return [cmd("get_server_capabilities")]  # hgnc-link cannot convert these
             return [cmd("hgnc_resolve_symbol", query=value)]
         return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_phenotype":

@@ -214,8 +214,8 @@ def register_association_tools(mcp: FastMCP) -> None:
             "an HGNC id (HGNC:6407) or an Ensembl gene id (ENSG00000133703). "
             "Returns {orpha_code, name} per disorder with pagination; an id is matched on "
             "Orphanet's own gene cross-references and echoed as resolved_from. Other gene "
-            "id forms (RefSeq, NCBI Gene, transcript ids) return invalid_input naming the "
-            "hgnc converter. "
+            "id forms return invalid_input: RefSeq and NCBI Gene ids name the hgnc "
+            "converter, a transcript id does not convert. "
             "Signature: find_diseases_by_gene(gene_symbol, limit=, offset=, response_mode=)."
         ),
     )

@@ -171,6 +171,14 @@ def resolve_gene(repo: OrphanetRepository, raw: str) -> tuple[str, dict[str, str
             "a disorder association, and not every row has an Ensembl reference: convert "
             "it to an HGNC symbol with hgnc_resolve_symbol and retry."
         )
+    if form == "ensembl_transcript_or_protein_id":
+        # hgnc_resolve_symbol does not convert these, so no converter is named.
+        raise InvalidInputError(
+            "gene_symbol is an Ensembl transcript or protein id; this tool takes a gene.",
+            field="gene_symbol",
+            allowed=GENE_FORMS,
+            hint="Send the gene's HGNC symbol, HGNC id or Ensembl gene id (ENSG...).",
+        )
     converter = "hgnc_resolve_gene_by_xref" if form == "ncbi_gene_id" else "hgnc_resolve_symbol"
     raise InvalidInputError(
         f"gene_symbol is not a gene symbol (detected form: {form}); Orphanet does not "

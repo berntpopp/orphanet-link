@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `invalid_input` with `field`, `allowed_values` and `hint`; an HGNC or Ensembl gene id no
   Orphanet gene row carries returns `not_found`. Both chain to the hgnc converter
   (`hgnc_resolve_symbol`, or `hgnc_resolve_gene_by_xref` for an NCBI Gene id) in
-  `_meta.next_commands`. An unknown gene symbol still returns the honest empty page.
+  `_meta.next_commands`, except a transcript/protein id, which names no converter. An unknown gene symbol still returns the honest empty page.
 - A bare number that is not an ORPHAcode (`resolve_disease`, `get_disease*`,
   `map_cross_ontology`) now says it was read as an ORPHAcode and offers the same call
   with `OMIM:<n>` in `_meta.next_commands`.

@@ -50,10 +50,8 @@ async def test_symbol_is_untouched_and_unknown_symbol_is_an_honest_empty(facade:
 @pytest.mark.parametrize(
     ("value", "first"),
     [
-        (
-            "ENST00000311936",
-            {"tool": "hgnc_resolve_symbol", "arguments": {"query": "ENST00000311936"}},
-        ),
+        # A transcript id: hgnc_resolve_symbol cannot convert it, so no converter is named.
+        ("ENST00000311936", {"tool": "get_server_capabilities", "arguments": {}}),
         ("NM_004985.5", {"tool": "hgnc_resolve_symbol", "arguments": {"query": "NM_004985.5"}}),
         (
             "NCBIGene:3845",
