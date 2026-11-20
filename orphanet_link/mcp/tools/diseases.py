@@ -40,9 +40,12 @@ def register_disease_tools(mcp: FastMCP) -> None:
         output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "resolve"},
         description=(
-            "Resolve a disease label, synonym, or ORPHAcode (ORPHA:166024 or 166024) "
-            "to the canonical Orphanet term {orpha_code, name, match_type}. An "
-            "ambiguous label returns ambiguous_query with candidates. "
+            "Resolve a disease label, synonym, ORPHAcode (ORPHA:166024 or 166024), or "
+            "cross-reference CURIE (OMIM:607131, MONDO:0006516, ICD-10, ICD-11, UMLS, MeSH, "
+            "GARD, MedDRA) to the canonical Orphanet term {orpha_code, name, match_type}. "
+            "For 2 or more queries, call resolve_disease_batch once instead of calling this "
+            "tool per item. A bare number is read as an ORPHAcode; prefix an OMIM number "
+            "(OMIM:163950). An ambiguous label returns ambiguous_query with candidates. "
             "Signature: resolve_disease(query, response_mode=)."
         ),
     )
@@ -122,8 +125,10 @@ def register_disease_tools(mcp: FastMCP) -> None:
         description=(
             "Return an Orphanet disease record: definition, synonyms, grouped "
             "cross-references, classification parents/children, age of onset, "
-            "inheritance, and disorder type. The term accepts an ORPHAcode, a "
-            "label/synonym, or an external xref CURIE (resolved first). xrefs are "
+            "inheritance, and disorder type. For 2 or more terms, call get_disease_batch "
+            "once instead of calling this tool per item. The term accepts an ORPHAcode, a "
+            "label/synonym, or an external xref CURIE (resolved first; a bare number is "
+            "read as an ORPHAcode, so prefix an OMIM number: OMIM:163950). xrefs are "
             "grouped by source; any nested count is leaf rows, not groups. "
             "Pass fields=['xrefs.OMIM', ...] for a sparse projection, or "
             "include=['genes','phenotypes','prevalence','disability'] to compose a "

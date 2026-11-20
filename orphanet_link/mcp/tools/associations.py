@@ -210,8 +210,12 @@ def register_association_tools(mcp: FastMCP) -> None:
         output_schema=None,  # B2 (see tools/__init__.py)
         tags={"disease", "genes", "search"},
         description=(
-            "Find all Orphanet disorders associated with an HGNC gene symbol. "
-            "Returns {orpha_code, name} per disorder with pagination. "
+            "Find all Orphanet disorders associated with a gene, given as an HGNC symbol, "
+            "an HGNC id (HGNC:6407) or an Ensembl gene id (ENSG00000133703). "
+            "Returns {orpha_code, name} per disorder with pagination; an id is matched on "
+            "Orphanet's own gene cross-references and echoed as resolved_from. Other gene "
+            "id forms return invalid_input: RefSeq and NCBI Gene ids name the hgnc "
+            "converter, a transcript id does not convert. "
             "Signature: find_diseases_by_gene(gene_symbol, limit=, offset=, response_mode=)."
         ),
     )
@@ -219,8 +223,9 @@ def register_association_tools(mcp: FastMCP) -> None:
         gene_symbol: Annotated[
             str,
             Field(
-                description="HGNC gene symbol, e.g. 'KIF7' or 'HNF1B'.",
-                examples=["KIF7", "HNF1B", "BRCA1"],
+                description="HGNC gene symbol, e.g. 'KIF7' or 'HNF1B'; an HGNC id "
+                "('HGNC:6407') or Ensembl gene id ('ENSG00000133703') is also accepted.",
+                examples=["KIF7", "HNF1B", "BRCA1", "HGNC:6407"],
                 max_length=MAX_SYMBOL_CHARS,
             ),
         ],
@@ -253,7 +258,8 @@ def register_association_tools(mcp: FastMCP) -> None:
         tags={"disease", "phenotypes", "search"},
         description=(
             "Find all Orphanet disorders annotated with an HPO term id. "
-            "Returns {orpha_code, name} per disorder with pagination. "
+            "Returns {orpha_code, name} per disorder with pagination. A phenotype label "
+            "is not accepted (invalid_input): get its id from hpo_resolve_term first. "
             "Signature: find_diseases_by_phenotype(hpo_id, limit=, offset=, response_mode=)."
         ),
     )
@@ -261,9 +267,8 @@ def register_association_tools(mcp: FastMCP) -> None:
         hpo_id: Annotated[
             str,
             Field(
-                description="HPO term id, e.g. 'HP:0000256'.",
+                description="HPO term id (HP: + seven digits), e.g. 'HP:0000256'; not a label.",
                 examples=["HP:0000256", "HP:0001250", "HP:0002015"],
-                pattern=r"^(HP:)?\d{7}$",
                 max_length=MAX_SYMBOL_CHARS,
             ),
         ],

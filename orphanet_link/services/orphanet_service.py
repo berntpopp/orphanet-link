@@ -18,7 +18,7 @@ from orphanet_link.exceptions import DataUnavailableError, InvalidInputError, No
 from orphanet_link.identifiers import normalize_hpo_id, normalize_orpha_code, parse_curie
 from orphanet_link.services.compose import compose_sections
 from orphanet_link.services.pagination import page_fields
-from orphanet_link.services.resolution import resolve
+from orphanet_link.services.resolution import resolve, resolve_gene
 from orphanet_link.services.shaping import (
     DEFAULT_RESPONSE_MODE,
     group_xrefs,
@@ -433,12 +433,9 @@ class OrphanetService:
         offset: int = 0,
         response_mode: str = DEFAULT_RESPONSE_MODE,
     ) -> dict[str, Any]:
-        """Find disorders associated with a gene symbol.
+        """Find disorders for a gene symbol, HGNC id or Ensembl gene id (see ``resolve_gene``).
 
-        Gene symbols have no strict canonical format to validate against, so any
-        non-empty token is accepted (whitespace-trimmed; matched case-insensitively
-        in the repository). An unknown symbol returns ``total: 0`` by design — that
-        is a genuine "no Orphanet disorder records this gene", not a malformed input.
+        An unknown symbol returns ``total: 0`` by design: no Orphanet disorder records it.
         """
         raw = (gene_symbol or "").strip()
         if not raw:
@@ -447,11 +444,13 @@ class OrphanetService:
             )
         limit = max(1, min(limit, _MAX_LIMIT))
         offset = max(0, offset)
-        result = self.repo.find_disorders_by_gene(raw, limit=limit, offset=offset)
+        symbol, resolved_from = resolve_gene(self.repo, raw)
+        result = self.repo.find_disorders_by_gene(symbol, limit=limit, offset=offset)
         hits = result.get("results", [])
         total = result.get("total", len(hits))
         return {
-            "gene_symbol": raw,
+            "gene_symbol": symbol,
+            **({"resolved_from": resolved_from} if resolved_from else {}),
             "results": hits,
             **page_fields(total=total, returned=len(hits), limit=limit, offset=offset),
             "orphanet_version": self._orphanet_version(),
@@ -466,10 +465,9 @@ class OrphanetService:
     ) -> dict[str, Any]:
         """Find disorders annotated with an HPO term.
 
-        The ``hpo_id`` is validated for shape (``HP:NNNNNNN``) and normalized before
-        the lookup, mirroring ``resolve_xref``'s CURIE handling: a malformed id
-        raises ``invalid_input`` (``field="hpo_id"``) instead of silently returning
-        an empty result, while a well-formed-but-absent id still returns ``total: 0``.
+        The ``hpo_id`` is validated for shape (``HP:NNNNNNN``) and normalized first: a
+        label or malformed id raises ``invalid_input`` (``field="hpo_id"``) instead of an
+        empty result, while a well-formed-but-absent id still returns ``total: 0``.
         """
         raw = (hpo_id or "").strip()
         if not raw:
@@ -479,8 +477,10 @@ class OrphanetService:
         canonical = normalize_hpo_id(raw)
         if canonical is None:
             raise InvalidInputError(
-                f"'{raw}' is not a valid HPO term id (expected HP:NNNNNNN, e.g. HP:0000256).",
+                "hpo_id is not an HPO term id (expected HP:NNNNNNN).",
                 field="hpo_id",
+                allowed=["HPO term id, e.g. HP:0000256"],
+                hint="For a phenotype label, get its id from hpo_resolve_term first.",
             )
         limit = max(1, min(limit, _MAX_LIMIT))
         offset = max(0, offset)

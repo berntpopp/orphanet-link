@@ -82,7 +82,7 @@ default `compact`), and returns the fleet's `success` / `_meta` / payload-or-err
 | `get_disease_descendants` | Transitive classification descendants (precomputed closure), paginated |
 | `map_cross_ontology` | A disorder's cross-references grouped by source (OMIM, MONDO, ICD-10/11, UMLS, GARD, MeSH, MedDRA) with mapping relations |
 | `resolve_xref` | External CURIE → matching Orphanet disorder(s), paginated |
-| `find_diseases_by_gene` | Reverse lookup: HGNC gene symbol → associated disorders, paginated |
+| `find_diseases_by_gene` | Reverse lookup: HGNC gene symbol, HGNC id or Ensembl gene id → associated disorders, paginated |
 | `find_diseases_by_phenotype` | Reverse lookup: HPO term id → associated disorders, paginated |
 | `resolve_disease_batch` | Batch-resolve up to `MAX_BATCH_ITEMS` labels/codes/xrefs; partial success per item |
 | `get_disease_batch` | Batch-fetch up to `MAX_BATCH_ITEMS` disease records; partial success per item; sparse `fields` projection |

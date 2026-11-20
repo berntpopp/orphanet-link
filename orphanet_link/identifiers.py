@@ -32,6 +32,37 @@ _KNOWN_PREFIXES = {
     "HGNC": "HGNC",
 }
 
+#: Gene identifier forms that are not HGNC symbols, tried in order. Group 1 is the value
+#: as Orphanet stores it (bare HGNC number, unversioned Ensembl gene id).
+_GENE_ID_FORMS = (
+    # [0-9], not \d: \d also matches non-Latin digits, which no identifier here uses.
+    ("hgnc_id", re.compile(r"HGNC\s*[:_]?\s*([0-9]+)", re.IGNORECASE)),
+    ("ensembl_gene_id", re.compile(r"(ENSG[0-9]{11})(?:\.[0-9]+)?", re.IGNORECASE)),
+    ("ensembl_transcript_or_protein_id", re.compile(r"(ENS[TP][0-9]{11}(?:\.[0-9]+)?)", re.I)),
+    ("refseq_accession", re.compile(r"([NX][MRP]_[0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)),
+    ("ncbi_gene_id", re.compile(r"(?:(?:NCBIGene|GeneID|Entrez)\s*:\s*)?([0-9]+)", re.I)),
+    (  # group 1 is the base accession; an isoform suffix (-2) is dropped
+        "uniprot_accession",
+        re.compile(
+            r"([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})(?:-[0-9]+)?",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+
+def classify_gene_id(value: str) -> tuple[str, str] | None:
+    """Return ``(form, local value)`` for a gene identifier that is not a symbol, else ``None``.
+
+    ``uniprot_accession`` is a shape only: real symbols share it (``P2RY12``, ``B3GAT3``),
+    so a caller must check the symbol first.
+    """
+    raw = (value or "").strip()
+    for form, pattern in _GENE_ID_FORMS:
+        if match := pattern.fullmatch(raw):
+            return form, match.group(1).upper()
+    return None
+
 
 def normalize_orpha_code(value: str) -> str | None:
     """Return the bare ORPHAcode digits, or ``None`` if ``value`` is not one.

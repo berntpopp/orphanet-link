@@ -39,8 +39,9 @@ MAX_SYMBOL_CHARS = 64
 QueryStr = Annotated[
     str,
     Field(
-        description="A disease label, synonym, or ORPHAcode (ORPHA:166024 or 166024).",
-        examples=["Aicardi syndrome", "ORPHA:58", "ORPHA:166024"],
+        description="A disease label, synonym, ORPHAcode (ORPHA:166024 or 166024), or "
+        "cross-reference CURIE (OMIM:607131, MONDO:0006516). A bare number is an ORPHAcode.",
+        examples=["Aicardi syndrome", "ORPHA:58", "ORPHA:166024", "OMIM:607131"],
         max_length=MAX_TERM_CHARS,
     ),
 ]
