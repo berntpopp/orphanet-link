@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from orphanet_link.identifiers import is_orpha_code, parse_curie
+from orphanet_link.identifiers import classify_gene_id, is_orpha_code, parse_curie
 
 #: Generic fill-in for the two context-free discovery tools' next step. The
 #: discovery tools have no query context, so they must not emit a concrete disease
@@ -74,6 +74,10 @@ def default_error_next_commands(
         "get_disease_classification",
     ):
         value = str(arguments.get("term", "") or arguments.get("query", ""))
+        if error_code == "not_found" and value.strip().isdigit():
+            # A bare number was read as an ORPHAcode; the usual other meaning is OMIM.
+            key = "query" if tool == "resolve_disease" else "term"
+            return [cmd(tool, **{key: f"OMIM:{value.strip()}"})]
         prefix, _ = parse_curie(value)
         # Sibling disease front door, namespaced: the router passes it through (§2a).
         mondo = [cmd("mondo_resolve_disease", query=value)] if tool == "resolve_disease" else []
@@ -85,9 +89,17 @@ def default_error_next_commands(
         value = str(arguments.get("xref_id", ""))
         return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_gene":
-        value = str(arguments.get("gene_symbol", ""))
+        value = str(arguments.get("gene_symbol", "")).strip()
+        if classified := classify_gene_id(value):
+            # A gene id Orphanet cannot match: hgnc-link converts it to the symbol.
+            if classified[0] == "ncbi_gene_id":
+                return [cmd("hgnc_resolve_gene_by_xref", source="entrez_id", value=classified[1])]
+            return [cmd("hgnc_resolve_symbol", query=value)]
         return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_phenotype":
+        value = str(arguments.get("hpo_id", "")).strip()
+        if value and not any(ch.isdigit() for ch in value):  # a label, not a mistyped id
+            return [cmd("hpo_resolve_term", query=value)]
         return [cmd("get_server_capabilities")]
     if error_code == "upstream_unavailable":
         # Covers the local-index-not-built case, which used to have its own

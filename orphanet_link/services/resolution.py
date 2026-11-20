@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from orphanet_link.exceptions import AmbiguousQueryError, NotFoundError
-from orphanet_link.identifiers import normalize_orpha_code, parse_curie
+from orphanet_link.exceptions import AmbiguousQueryError, InvalidInputError, NotFoundError
+from orphanet_link.identifiers import classify_gene_id, normalize_orpha_code, parse_curie
 
 if TYPE_CHECKING:
     from orphanet_link.data.repository import OrphanetRepository
@@ -57,7 +57,11 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
                 "name": record["name"],
                 "match_type": "orpha_code",
             }
-        # Numeric but not found -- fall through to label search
+        if raw.isdigit():
+            raise NotFoundError(
+                f"No Orphanet disorder for ORPHA:{code}: a bare number is read as an "
+                f"ORPHAcode. If it is an OMIM number, send OMIM:{code}."
+            )
         raise NotFoundError(f"No Orphanet disorder for ORPHA:{code}.")
 
     # --- b. Known CURIE (xref) ---
@@ -123,6 +127,57 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
         # Fixed message: the query is never echoed (Response-Envelope §2a).
         "No Orphanet disorder matches the query. Try an ORPHAcode (ORPHA:NNN), a disease "
         "label, a cross-reference CURIE, or mondo_resolve_disease for a MONDO id."
+    )
+
+
+#: Gene identifier forms Orphanet's own gene rows carry -> the ``gene`` column.
+_GENE_XREF_COLUMN = {
+    "hgnc_id": "hgnc_id",
+    "ensembl_gene_id": "ensembl_id",
+    "uniprot_accession": "swissprot_id",
+}
+
+#: Accepted forms of a gene argument, each with an example (``allowed_values``).
+GENE_FORMS = [
+    "HGNC gene symbol, e.g. KRAS",
+    "HGNC id, e.g. HGNC:6407",
+    "Ensembl gene id, e.g. ENSG00000133703",
+]
+
+
+def resolve_gene(repo: OrphanetRepository, raw: str) -> tuple[str, dict[str, str] | None]:
+    """Map a gene argument to its Orphanet gene symbol: ``(symbol, resolved_from | None)``.
+
+    A symbol passes through untouched. An identifier Orphanet's gene rows carry is
+    converted and echoed; any other identifier form is an error, never an empty result.
+    """
+    classified = classify_gene_id(raw)
+    if classified is None:
+        return raw, None
+    form, value = classified
+    if form == "uniprot_accession" and repo.gene_symbols("gene_symbol", raw):
+        return raw, None  # a real symbol that merely has the accession shape
+    column = _GENE_XREF_COLUMN.get(form)
+    symbols = repo.gene_symbols(column, value) if column else []
+    if len(symbols) == 1:
+        return symbols[0], {"input": raw, "form": form, "resolved_to": symbols[0]}
+    if form == "uniprot_accession":
+        # ponytail: the shape collides with real symbols (P2RY13, B3GAT1), so an
+        # unmatched one stays a symbol lookup; reject it once symbols are validated.
+        return raw, None
+    if column:
+        raise NotFoundError(
+            "No Orphanet gene row carries this identifier. Orphanet lists only genes with "
+            "a disorder association, and not every row has an Ensembl reference: convert "
+            "it to an HGNC symbol with hgnc_resolve_symbol and retry."
+        )
+    converter = "hgnc_resolve_gene_by_xref" if form == "ncbi_gene_id" else "hgnc_resolve_symbol"
+    raise InvalidInputError(
+        f"gene_symbol is not a gene symbol (detected form: {form}); Orphanet does not "
+        "index that form.",
+        field="gene_symbol",
+        allowed=GENE_FORMS,
+        hint=f"Convert it to an HGNC symbol with {converter}, then retry with the symbol.",
     )
 
 

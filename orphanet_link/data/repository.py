@@ -228,6 +228,16 @@ class OrphanetRepository:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def gene_symbols(self, column: str, value: str) -> list[str]:
+        """Return the gene symbols whose ``column`` equals ``value`` (case-insensitive)."""
+        if column not in {"gene_symbol", "hgnc_id", "ensembl_id", "swissprot_id"}:
+            raise ValueError(column)
+        rows = self._conn.execute(
+            f"SELECT gene_symbol FROM gene WHERE UPPER({column}) = ?",  # noqa: S608 - allowlisted
+            (value.upper(),),
+        ).fetchall()
+        return [r["gene_symbol"] for r in rows]
+
     def find_disorders_by_gene(
         self, gene_symbol: str, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:

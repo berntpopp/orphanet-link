@@ -259,7 +259,7 @@ def build_capabilities() -> dict[str, Any]:
             "descendant_count -> get_disease_descendants, then genes per subtype)",
             "term -> get_disease_phenotypes (HPO phenotypes)",
             "term -> get_disease_prevalence / get_disease_natural_history / get_disease_disability",
-            "gene symbol -> find_diseases_by_gene",
+            "gene symbol / HGNC id / Ensembl gene id -> find_diseases_by_gene",
             "HPO id -> find_diseases_by_phenotype",
             "term -> get_disease_ancestors / get_disease_descendants (transitive closure)",
             "term -> get_disease_classification (Orphanet classification tree)",
@@ -275,8 +275,9 @@ def build_capabilities() -> dict[str, Any]:
             "find_diseases_by_phenotype -- instead return a success page with total: 0 "
             "for a well-formed but absent id (an empty result is a valid answer, not an "
             "error). A malformed argument (bad CURIE, non-HP HPO id, unknown frequency "
-            "bucket) is rejected up front with 'invalid_input' carrying field + "
-            "allowed_values. Orphanet obsolescence / successor links are not currently "
+            "bucket, a gene id form Orphanet does not index) is rejected with "
+            "'invalid_input' carrying field + allowed_values; an HGNC/Ensembl gene id no "
+            "Orphanet gene row carries is 'not_found', never an empty page. Orphanet obsolescence / successor links are not currently "
             "surfaced by this index (the ingested Orphadata products carry no "
             "withdrawn/replaced-by data), so every resolvable ORPHAcode is treated as "
             "active."

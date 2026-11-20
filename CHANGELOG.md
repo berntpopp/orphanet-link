@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-20
+
+### Added
+
+- `find_diseases_by_gene` accepts an HGNC id (`HGNC:6407`) or an Ensembl gene id
+  (`ENSG00000133703`, version suffix ignored), matched on Orphanet's own gene
+  cross-references and echoed as `resolved_from: {input, form, resolved_to}`. A UniProt
+  accession that exactly one Orphanet gene row carries resolves the same way
+  (genefoundry-router #343, Response-Envelope §2b).
+
+### Fixed
+
+- `find_diseases_by_gene` no longer answers a gene identifier it cannot match with
+  `total: 0`. RefSeq accessions, Ensembl transcript/protein ids and NCBI Gene ids return
+  `invalid_input` with `field`, `allowed_values` and `hint`; an HGNC or Ensembl gene id no
+  Orphanet gene row carries returns `not_found`. Both chain to the hgnc converter
+  (`hgnc_resolve_symbol`, or `hgnc_resolve_gene_by_xref` for an NCBI Gene id) in
+  `_meta.next_commands`. An unknown gene symbol still returns the honest empty page.
+- A bare number that is not an ORPHAcode (`resolve_disease`, `get_disease*`,
+  `map_cross_ontology`) now says it was read as an ORPHAcode and offers the same call
+  with `OMIM:<n>` in `_meta.next_commands`.
+- `find_diseases_by_phenotype` given a phenotype label returns `invalid_input` with
+  `allowed_values`, a `hint` and `hpo_resolve_term` as the next command. The `hpo_id`
+  schema `pattern` is gone, so the id forms the service already normalises (`HPO:`,
+  lower case) are no longer rejected before it runs.
+
+### Changed
+
+- `resolve_disease` documents the cross-reference CURIEs it accepts; `resolve_disease`
+  and `get_disease` point at their batch siblings.
+
 ## [0.6.2] - 2026-11-19
 
 ### Fixed
