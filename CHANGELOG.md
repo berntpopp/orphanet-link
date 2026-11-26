@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-26
+
+### Fixed
+
+- `_meta.next_commands` no longer carries the caller's unvalidated input (GTS-CORE-TXT-04): an unresolved term, a no-hit `search_diseases`, an unmatched `resolve_xref` and a phenotype label now point to `get_server_capabilities` instead of forwarding the raw text to another tool; only a bare number (as `OMIM:`) or a strict CURIE is still forwarded. Page/widen steps that repeat the caller's call are omitted when the repeated value exceeds 200 characters or contains control/format characters.
+- Error and ambiguity messages (`resolve_xref`, `resolve_disease`, the phenotype `frequency` filter) no longer quote the caller's value.
+
 ## [0.10.0] - 2026-11-26
 
 ### Added

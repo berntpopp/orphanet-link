@@ -103,7 +103,7 @@ async def test_not_found_with_suggestions_chains_to_candidates() -> None:
     assert result["candidates"] == [{"orpha_code": "58", "name": "A"}]
     steps = result["_meta"]["next_commands"]
     assert {"tool": "get_disease", "arguments": {"term": "58"}} in steps
-    assert {"tool": "search_diseases", "arguments": {"query": "alexandr"}} in steps
+    assert "alexandr" not in str(steps)  # caller text is never forwarded (GTS-CORE-TXT-04)
 
 
 async def test_explicit_fallback_is_used_as_next_command() -> None:

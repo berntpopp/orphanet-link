@@ -251,9 +251,6 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
             for s in exc.suggestions[:3]
             if s.get("orpha_code") or s.get("mondo_id")
         ]
-        query = str(context.arguments.get("term", "") or context.arguments.get("query", ""))
-        if query:
-            steps.append(cmd("search_diseases", query=query))
         envelope["_meta"]["next_commands"] = steps or [cmd("get_server_capabilities")]
         return envelope
     if context.fallback is not None:
