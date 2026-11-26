@@ -33,7 +33,7 @@ from orphanet_link.exceptions import (
 )
 from orphanet_link.mcp import metrics
 from orphanet_link.mcp.next_commands import cmd, default_error_next_commands, withdrawn_recovery
-from orphanet_link.mcp.payload import nest_payload
+from orphanet_link.mcp.payload import nest_payload, pagination_meta
 from orphanet_link.mcp.untrusted_content import (
     UntrustedTextLimitError,
     sanitize_message,
@@ -452,6 +452,7 @@ async def run_mcp_tool(
                 "source": "orphanet",
                 "unsafe_for_clinical_use": True,
                 "elapsed_ms": elapsed,
+                **(pagination_meta(result) if success else {}),
             }
             _stamp_capabilities_version(meta)
             _stamp_data_version(meta)

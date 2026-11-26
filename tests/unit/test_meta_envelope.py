@@ -142,4 +142,5 @@ async def test_compact_meta_shape_is_tool_independent(
     """The exact ``compact`` ``_meta`` set holds for list/non-shaped tools too."""
     result = await _call(facade, name, response_mode="compact", **kwargs)
     assert result["success"] is True
-    assert set(result["_meta"].keys()) == _COMPACT_META
+    paged = {"pagination"} if "total" in result else set()  # Envelope v1 section 5
+    assert set(result["_meta"].keys()) == _COMPACT_META | paged
