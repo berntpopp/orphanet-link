@@ -116,15 +116,15 @@ async def test_get_disease_definition_fenced_via_mcp_tool(stub_service, facade: 
     result = await facade.call_tool("get_disease", {"term": "ORPHA:1", "response_mode": "standard"})
 
     sc = result.structured_content
-    _assert_fenced(sc["definition"], HOSTILE, record_id="ORPHA:1")
+    _assert_fenced(sc["result"]["definition"], HOSTILE, record_id="ORPHA:1")
     # the TextContent JSON mirror carries the same typed object, not a bare string
     mirror = json.loads(result.content[0].text)
-    assert mirror["definition"]["kind"] == "untrusted_text"
-    assert mirror["definition"]["text"] == sc["definition"]["text"]
-    assert mirror["definition"]["raw_sha256"] == sc["definition"]["raw_sha256"]
+    assert mirror["result"]["definition"]["kind"] == "untrusted_text"
+    assert mirror["result"]["definition"]["text"] == sc["result"]["definition"]["text"]
+    assert mirror["result"]["definition"]["raw_sha256"] == sc["result"]["definition"]["raw_sha256"]
     # no sibling tool-reference field synthesized from the prose (record level)
     for key in _SIBLING_KEYS:
-        assert key not in sc
+        assert key not in sc["result"]
 
 
 async def test_search_full_definition_fenced_via_mcp_tool(stub_service, facade: Any) -> None:
@@ -210,7 +210,7 @@ async def test_fields_projection_cannot_bypass_fence(stub_service, facade: Any) 
         "get_disease",
         {"term": "ORPHA:1", "response_mode": "standard", "fields": ["definition.text"]},
     )
-    sc = leaked.structured_content
+    sc = leaked.structured_content["result"]
     if "definition" in sc:  # if present at all, it must be the full typed object
         assert isinstance(sc["definition"], dict)
         assert sc["definition"]["kind"] == "untrusted_text"
@@ -220,5 +220,5 @@ async def test_fields_projection_cannot_bypass_fence(stub_service, facade: Any) 
         "get_disease",
         {"term": "ORPHA:1", "response_mode": "standard", "fields": ["definition"]},
     )
-    obj = kept.structured_content["definition"]
+    obj = kept.structured_content["result"]["definition"]
     _assert_fenced(obj, HOSTILE, record_id="ORPHA:1")

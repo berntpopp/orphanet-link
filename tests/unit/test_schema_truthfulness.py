@@ -71,11 +71,11 @@ async def test_description_promises_only_parameters_the_tool_accepts(
 
 
 async def test_map_cross_ontology_names_the_key_it_actually_returns(facade: FastMCP) -> None:
-    """It returns `mappings`; its description must not point the model at `xrefs`."""
+    """It returns the mappings as `result`; its description must not point at `xrefs`."""
     tool = await _tool(facade, "map_cross_ontology")
     payload = envelope(await tool.fn(term="ORPHA:166024"))
-    assert "mappings" in payload
-    assert "mappings" in (tool.description or ""), (
+    assert "OMIM" in payload["result"]
+    assert "`result`" in (tool.description or ""), (
         "the description must name the key this tool actually returns"
     )
 

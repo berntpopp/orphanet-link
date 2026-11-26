@@ -43,19 +43,20 @@ async def test_get_disease_include_composes_sections_in_one_call(facade: FastMCP
     )
     assert composed["success"] is True
     # The composed record carries the base disease fields AND the requested sections.
-    assert composed["name"]
-    assert "definition" in composed or composed.get("definition") is None
-    assert "genes" in composed, "include=genes must attach the gene section"
-    assert "prevalence" in composed, "include=prevalence must attach prevalence rows"
+    record = composed["result"]
+    assert record["name"]
+    assert "definition" in record or record.get("definition") is None
+    assert "genes" in record, "include=genes must attach the gene section"
+    assert "prevalence" in record, "include=prevalence must attach prevalence rows"
     # And those sections match what the standalone tools return (no drift).
     genes = await _call(facade, "get_disease_genes", term=_ORPHA_KIF7)
-    assert composed["genes"] == genes["genes"]
+    assert record["genes"] == genes["results"]
 
 
 async def test_get_disease_include_phenotypes_matches_standalone(facade: FastMCP) -> None:
     composed = await _call(facade, "get_disease", term=_ORPHA_58, include=["phenotypes"])
     standalone = await _call(facade, "get_disease_phenotypes", term=_ORPHA_58)
-    assert composed["phenotypes"] == standalone["phenotypes"]
+    assert composed["result"]["phenotypes"] == standalone["results"]
 
 
 async def test_get_disease_include_unknown_section_is_invalid_input(facade: FastMCP) -> None:

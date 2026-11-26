@@ -104,10 +104,12 @@ async def test_snapshot_resolve_disease(facade: FastMCP) -> None:
     result = await _call(facade, "resolve_disease", query=_ORPHA_58)
     assert result == {
         "success": True,
-        "query": "ORPHA:58",
-        "orpha_code": "58",
-        "name": _NAME_58,
-        "match_type": "orpha_code",
+        "result": {
+            "query": "ORPHA:58",
+            "orpha_code": "58",
+            "name": _NAME_58,
+            "match_type": "orpha_code",
+        },
         "_meta": _meta("resolve_disease", [_step("get_disease", "58")]),
     }
 
@@ -130,12 +132,10 @@ async def test_snapshot_search_diseases(facade: FastMCP) -> None:
 async def test_snapshot_get_disease_stable_subset(facade: FastMCP) -> None:
     """Full record is large/churn-prone: lock identity + key associations only."""
     result = await _call(facade, "get_disease", term=_ORPHA_166024)
-    stable = _subset(
-        result,
-        ["success", "orpha_code", "name", "disorder_type", "parents", "synonyms"],
-    )
+    assert result["success"] is True
+    record = result["result"]
+    stable = _subset(record, ["orpha_code", "name", "disorder_type", "parents", "synonyms"])
     assert stable == {
-        "success": True,
         "orpha_code": "166024",
         "name": _NAME_166024,
         "disorder_type": "Disease",
@@ -144,7 +144,7 @@ async def test_snapshot_get_disease_stable_subset(facade: FastMCP) -> None:
         "synonyms": ["Multiple epiphyseal dysplasia, Al-Gazali type"],
     }
     # OMIM cross-reference present and exact-match in the full xrefs block
-    assert result["xrefs"]["OMIM"] == [_OMIM_607131]
+    assert record["xrefs"]["OMIM"] == [_OMIM_607131]
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ async def test_snapshot_get_disease_genes(facade: FastMCP) -> None:
     }
     # One gene row: lock the load-bearing identity/association fields (the long tail
     # of cross-ref ids -- ensembl/swissprot/reactome/... -- is left to e2e tests).
-    gene = result["genes"][0]
+    gene = result["results"][0]
     assert _subset(
         gene,
         ["gene_symbol", "gene_name", "association_type", "association_status", "hgnc_id"],
@@ -186,7 +186,7 @@ async def test_snapshot_get_disease_phenotypes(facade: FastMCP) -> None:
         "orpha_code": "58",
         "name": _NAME_58,
         "count": 2,
-        "phenotypes": [
+        "results": [
             {
                 "hpo_id": "HP:0000256",
                 "hpo_term": "Macrocephaly",
@@ -215,9 +215,7 @@ async def test_snapshot_get_disease_prevalence(facade: FastMCP) -> None:
     }
     # Two rows; lock type/class/value (the prevalence_class only appears on the
     # second row -- a key shape fact -- and val_moy carries the numeric estimate).
-    rows = [
-        _pick(p, ["prevalence_type", "prevalence_class", "val_moy"]) for p in result["prevalence"]
-    ]
+    rows = [_pick(p, ["prevalence_type", "prevalence_class", "val_moy"]) for p in result["results"]]
     assert rows == [
         {"prevalence_type": "Cases/families", "val_moy": 4.0},
         {
@@ -235,10 +233,12 @@ async def test_snapshot_get_disease_natural_history(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_natural_history", term=_ORPHA_166024)
     assert result == {
         "success": True,
-        "orpha_code": "166024",
-        "name": _NAME_166024,
-        "age_of_onset": [{"onset": "Infancy"}, {"onset": "Neonatal"}],
-        "inheritance": [{"inheritance": "Autosomal recessive"}],
+        "result": {
+            "orpha_code": "166024",
+            "name": _NAME_166024,
+            "age_of_onset": [{"onset": "Infancy"}, {"onset": "Neonatal"}],
+            "inheritance": [{"inheritance": "Autosomal recessive"}],
+        },
         "_meta": _meta("get_disease_natural_history", [_step("get_disease", "166024")]),
     }
 
@@ -251,5 +251,6 @@ async def test_snapshot_get_disease_disability(facade: FastMCP) -> None:
         "name": _NAME_166024,
         "count": 0,
         "coverage": "none",
+        "results": [],
         "_meta": _meta("get_disease_disability", [_step("get_disease", "166024")]),
     }

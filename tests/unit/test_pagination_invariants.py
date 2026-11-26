@@ -31,9 +31,9 @@ _ORPHA_156 = "ORPHA:156"  # descendants closure = {93419, 166024} (total 2)
 #: level up; a hardcoded list a derived guard pins is just a fixture table.
 _LIST_TOOLS: list[tuple[str, dict[str, Any], str]] = [
     ("search_diseases", {"query": "a"}, "results"),
-    ("get_disease_ancestors", {"term": _ORPHA_KIF7}, "ancestors"),
-    ("get_disease_descendants", {"term": _ORPHA_156}, "descendants"),
-    ("resolve_xref", {"xref_id": "OMIM:607131"}, "matches"),
+    ("get_disease_ancestors", {"term": _ORPHA_KIF7}, "results"),
+    ("get_disease_descendants", {"term": _ORPHA_156}, "results"),
+    ("resolve_xref", {"xref_id": "OMIM:607131"}, "results"),
     ("find_diseases_by_gene", {"gene_symbol": "KIF7"}, "results"),
     ("find_diseases_by_phenotype", {"hpo_id": "HP:0000256"}, "results"),
 ]
