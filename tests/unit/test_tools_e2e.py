@@ -317,13 +317,12 @@ async def test_resolve_disease_unknown_returns_error_envelope(facade: FastMCP) -
     assert "_meta" in result
 
 
-async def test_resolve_disease_miss_chains_to_mondo(facade: FastMCP) -> None:
-    """#137 (Response-Envelope §2a): a free-text miss chains to Mondo, the disease front door."""
+async def test_resolve_disease_miss_does_not_forward_query(facade: FastMCP) -> None:
+    """A free-text miss never forwards the unvalidated query (GTS-CORE-TXT-04)."""
     query = "__NONEXISTENT_DISEASE_XYZ__"
     result = await _call(facade, "resolve_disease", query=query)
     assert result["error_code"] == "not_found"
     assert query not in result["message"]  # fixed, server-authored message
-    assert result["_meta"]["next_commands"][:2] == [
-        {"tool": "search_diseases", "arguments": {"query": query}},
-        {"tool": "mondo_resolve_disease", "arguments": {"query": query}},
+    assert result["_meta"]["next_commands"] == [
+        {"tool": "get_server_capabilities", "arguments": {}}
     ]

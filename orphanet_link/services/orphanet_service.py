@@ -225,7 +225,7 @@ class OrphanetService:
         """
         if frequency is not None and frequency not in HPO_FREQUENCIES:
             raise InvalidInputError(
-                f"'{frequency}' is not a valid HPO frequency label.",
+                "frequency is not a valid HPO frequency label.",
                 field="frequency",
                 allowed=list(HPO_FREQUENCIES),
                 hint="get_disease_phenotypes(term, frequency=, response_mode=)",
@@ -408,7 +408,7 @@ class OrphanetService:
         prefix, local = parse_curie(raw)
         if prefix is None:
             raise InvalidInputError(
-                f"'{raw}' is not a valid CURIE (expected PREFIX:LOCAL, e.g. OMIM:607131).",
+                "xref_id is not a valid CURIE (expected PREFIX:LOCAL, e.g. OMIM:607131).",
                 field="xref_id",
             )
         limit = max(1, min(limit, _MAX_LIMIT))

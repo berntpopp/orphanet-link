@@ -8,6 +8,7 @@ chainers steer the success path (resolve -> record -> hierarchy -> cross-ontolog
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from orphanet_link.identifiers import classify_gene_id, is_orpha_code, parse_curie
@@ -17,6 +18,10 @@ from orphanet_link.identifiers import classify_gene_id, is_orpha_code, parse_cur
 #: label (it reads as a fabricated Orphanet answer, F-02); this bracketed token is
 #: self-evidently a template the agent replaces with the user's term.
 DISCOVERY_PLACEHOLDER_QUERY = "<disease name or ORPHAcode>"
+
+#: A strict CURIE (no whitespace, plain local part): the only caller value a recovery
+#: step may forward to resolve_xref (GTS-CORE-TXT-04).
+_STRICT_CURIE_RE = re.compile(r"[A-Za-z][A-Za-z0-9.\-]*:[A-Za-z0-9_.\-]+")
 
 
 def cmd(tool: str, **arguments: Any) -> dict[str, Any]:
@@ -38,11 +43,21 @@ def page_cmd(tool: str, base_args: dict[str, Any], next_offset: int) -> dict[str
     return cmd(tool, **{**base_args, "offset": next_offset})
 
 
+def safe_echo(value: Any) -> bool:
+    """True if a caller string may be repeated in a page/widen step (GTS-CORE-TXT-04):
+    at most 200 characters and no control/format code points (Unicode Cc/Cf)."""
+    text = str(value)
+    return len(text) <= 200 and not any(unicodedata.category(c) in ("Cc", "Cf") for c in text)
+
+
 def _more_steps(
     tool: str, base_args: dict[str, Any], payload: dict[str, Any], ceiling: int
 ) -> list[dict[str, Any]]:
-    """Forward-page step (if any) then a widen step, for a truncated list payload."""
-    if not payload.get("truncated"):
+    """Forward-page step (if any) then a widen step, for a truncated list payload.
+
+    Omitted when a repeated argument fails ``safe_echo``.
+    """
+    if not payload.get("truncated") or not all(map(safe_echo, base_args.values())):
         return []
     steps: list[dict[str, Any]] = []
     next_offset = payload.get("next_offset")
@@ -60,7 +75,10 @@ def _get_term_id(payload: dict[str, Any]) -> str | None:
 def default_error_next_commands(
     tool: str, error_code: str, arguments: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """A sensible recovery step for any error lacking an explicit fallback."""
+    """A sensible recovery step for any error lacking an explicit fallback.
+
+    Only validated identifiers are forwarded; free text never is (GTS-CORE-TXT-04).
+    """
     if tool in (
         "resolve_disease",
         "get_disease",
@@ -80,16 +98,15 @@ def default_error_next_commands(
             # (MIM numbers have six digits, so a longer number gets no such offer).
             key = "query" if tool == "resolve_disease" else "term"
             return [cmd(tool, **{key: f"OMIM:{value.strip()}"})]
-        prefix, _ = parse_curie(value)
-        # Sibling disease front door, namespaced: the router passes it through (§2a).
-        mondo = [cmd("mondo_resolve_disease", query=value)] if tool == "resolve_disease" else []
-        if prefix is not None:
+        value = value.strip()
+        if parse_curie(value)[0] is not None and _STRICT_CURIE_RE.fullmatch(value):
+            # Sibling disease front door, namespaced: the router passes it through (§2a).
+            mondo = [cmd("mondo_resolve_disease", query=value)] if tool == "resolve_disease" else []
             return [cmd("resolve_xref", xref_id=value), cmd("search_diseases", query=value), *mondo]
         if value and not is_orpha_code(value):
-            return [cmd("search_diseases", query=value), *mondo, cmd("get_server_capabilities")]
+            return [cmd("get_server_capabilities")]
     if tool == "resolve_xref":
-        value = str(arguments.get("xref_id", ""))
-        return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
+        return [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_gene":
         value = str(arguments.get("gene_symbol", "")).strip()
         if classified := classify_gene_id(value):
@@ -99,11 +116,8 @@ def default_error_next_commands(
             if classified[0] == "ensembl_transcript_or_protein_id":
                 return [cmd("get_server_capabilities")]  # hgnc-link cannot convert these
             return [cmd("hgnc_resolve_symbol", query=value)]
-        return [cmd("search_diseases", query=value)] if value else [cmd("get_server_capabilities")]
+        return [cmd("get_server_capabilities")]
     if tool == "find_diseases_by_phenotype":
-        value = str(arguments.get("hpo_id", "")).strip()
-        if value and not any(ch.isdigit() for ch in value):  # a label, not a mistyped id
-            return [cmd("hpo_resolve_term", query=value)]
         return [cmd("get_server_capabilities")]
     if error_code == "upstream_unavailable":
         # Covers the local-index-not-built case, which used to have its own
@@ -137,10 +151,7 @@ def after_resolve_disease(resolution: dict[str, Any]) -> list[dict[str, Any]]:
     """After resolve_disease: open the canonical record, else fall back to search."""
     term_id = _get_term_id(resolution)
     if not term_id:
-        return [
-            cmd("search_diseases", query=str(resolution.get("query", ""))),
-            cmd("get_server_capabilities"),
-        ]
+        return [cmd("get_server_capabilities")]  # never forward an unresolved query (TXT-04)
     return [cmd("get_disease", term=term_id)]
 
 
@@ -148,7 +159,7 @@ def after_search(query: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
     """After search_diseases: open the top hit; widen if truncated."""
     hits = payload.get("results", [])
     if not hits:
-        return [cmd("resolve_disease", query=query), cmd("get_server_capabilities")]
+        return [cmd("get_server_capabilities")]  # never forward a no-hit query (TXT-04)
     steps: list[dict[str, Any]] = []
     top = _get_term_id(hits[0])
     if top:
@@ -209,10 +220,7 @@ def after_resolve_xref(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """After resolve_xref: open the top matching Orphanet term; widen if truncated."""
     matches = payload.get("matches", [])
     if not matches:
-        return [
-            cmd("search_diseases", query=str(payload.get("xref_id", ""))),
-            cmd("get_server_capabilities"),
-        ]
+        return [cmd("get_server_capabilities")]  # never forward an unmatched xref (TXT-04)
     steps: list[dict[str, Any]] = []
     top = _get_term_id(matches[0])
     if top:

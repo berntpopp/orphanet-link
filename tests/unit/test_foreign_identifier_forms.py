@@ -125,10 +125,8 @@ async def test_phenotype_label_and_malformed_id_are_invalid_input(facade: FastMC
     label = await _call(facade, "find_diseases_by_phenotype", hpo_id="Macrocephaly")
     assert label["error_code"] == "invalid_input" and label["field"] == "hpo_id"
     assert label["allowed_values"] and label["hint"]
-    assert label["_meta"]["next_commands"][0] == {
-        "tool": "hpo_resolve_term",
-        "arguments": {"query": "Macrocephaly"},
-    }
+    # the unvalidated label is never forwarded (GTS-CORE-TXT-04)
+    assert label["_meta"]["next_commands"] == [{"tool": "get_server_capabilities", "arguments": {}}]
     malformed = await _call(facade, "find_diseases_by_phenotype", hpo_id="HP:000256")
     assert malformed["error_code"] == "invalid_input" and malformed["field"] == "hpo_id"
     assert malformed["_meta"]["next_commands"][0]["tool"] != "find_diseases_by_phenotype"

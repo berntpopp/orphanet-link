@@ -80,10 +80,10 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
                 for h in hits[:_MAX_AMBIGUITY_CANDIDATES]
             ]
             raise AmbiguousQueryError(
-                f"'{raw}' maps to {len(hits)} Orphanet disorders; pick one.",
+                f"The cross-reference maps to {len(hits)} Orphanet disorders; pick one.",
                 candidates=candidates,
             )
-        raise NotFoundError(f"No Orphanet disorder cross-references {raw}.")
+        raise NotFoundError("No Orphanet disorder carries this cross-reference.")
 
     # --- c. Exact label ---
     label_hits = repo.resolve_label(raw)
@@ -100,7 +100,7 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
         # Multiple distinct codes share the same label
         candidates = _dedupe_candidates(label_hits)
         raise AmbiguousQueryError(
-            f"'{raw}' matches {len(distinct)} Orphanet disorders; pick one.",
+            f"The query matches {len(distinct)} Orphanet disorders; pick one.",
             candidates=candidates,
         )
 
@@ -120,7 +120,7 @@ def resolve(repo: OrphanetRepository, query: str) -> dict[str, Any]:
             for h in search_hits[:_MAX_AMBIGUITY_CANDIDATES]
         ]
         raise AmbiguousQueryError(
-            f"'{raw}' matches multiple Orphanet disorders; pick one.",
+            "The query matches multiple Orphanet disorders; pick one.",
             candidates=candidates,
         )
     raise NotFoundError(
