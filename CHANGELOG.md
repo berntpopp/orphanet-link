@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-26
+
+### Added
+
+- Every list tool reports `_meta.pagination` (`total_count`, `has_more`, `next_cursor`, and `next_offset` while more rows remain), built once in the envelope from the page fields the tool already returns (Response-Envelope v1 §5). Paging is by `offset`, so `next_cursor` is always `null`.
+
 ## [0.9.0] - 2026-11-26
 
 ### Changed

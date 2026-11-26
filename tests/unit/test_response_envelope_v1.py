@@ -54,3 +54,18 @@ async def test_error_envelope_is_flat_not_a_bare_exception() -> None:
     assert "error" not in result  # flat, not nested
     assert result["_meta"]["tool"] == "get_disease"
     assert result["_meta"]["unsafe_for_clinical_use"] is True
+
+
+async def test_list_result_carries_pagination_meta() -> None:
+    """A list tool's page fields are reported as ``_meta.pagination`` (Envelope v1 section 5)."""
+
+    async def call() -> dict[str, object]:
+        return {"results": [{"id": "x"}], "total": 3, "truncated": True, "next_offset": 1}
+
+    result = envelope(await run_mcp_tool("search_diseases", call))
+    assert result["_meta"]["pagination"] == {
+        "total_count": 3,
+        "has_more": True,
+        "next_cursor": None,
+        "next_offset": 1,
+    }

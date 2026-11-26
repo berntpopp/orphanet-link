@@ -27,6 +27,8 @@ _VOLATILE_META = {
     "data_version",
     "retrieved_at",
     "capabilities_version",
+    # restates the pinned page fields; its shape is pinned in test_response_envelope_v1
+    "pagination",
 }
 
 
