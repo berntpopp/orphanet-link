@@ -34,7 +34,7 @@ def register_xref_tools(mcp: FastMCP) -> None:
         description=(
             "Resolve an external cross-reference CURIE (OMIM/MONDO/ICD-10/ICD-11/"
             "UMLS/GARD/MeSH/MedDRA) back to the Orphanet disorder(s) that map to it. "
-            "Returns matches[] plus a pagination block {total, returned, limit, "
+            "Returns results[] plus a pagination block {total, returned, limit, "
             "offset, truncated, next_offset}; when truncated, next_commands carries a "
             "forward-page step. Miss semantics (list-shaped, unlike resolve_disease): "
             "a malformed CURIE is rejected with invalid_input, while a well-formed but "
@@ -74,8 +74,8 @@ def register_xref_tools(mcp: FastMCP) -> None:
         description=(
             "List an Orphanet disorder's cross-references to other ontologies, grouped "
             "by source (OMIM/MONDO/ICD-10/ICD-11/UMLS/GARD/MeSH/MedDRA), each with "
-            "its mapping relation. Returns them under `mappings` (get_disease returns "
-            "the same data under `xrefs`). Use prefixes=['OMIM'] to restrict to a "
+            "its mapping relation. Returns them under `result` (get_disease returns "
+            "the same data under `result.xrefs`). Use prefixes=['OMIM'] to restrict to a "
             "subset of sources. count is the number of leaf mapping rows (individual "
             "targets), not the number of source groups. "
             "Signature: map_cross_ontology(term, prefixes=, response_mode=)."

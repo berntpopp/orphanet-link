@@ -34,12 +34,14 @@ async def test_snapshot_get_disease_classification(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_classification", term=_ORPHA_166024)
     # Load-bearing invariant: parents are DEDUPED to a single entry, unique by
     # orpha_code, with no null leaf fields (compact drops a null name recursively).
-    assert result["parents"] == [{"orpha_code": "93419"}]
+    assert result["result"]["parents"] == [{"orpha_code": "93419"}]
     assert result == {
         "success": True,
-        "orpha_code": "166024",
-        "name": _NAME_166024,
-        "parents": [{"orpha_code": "93419"}],
+        "result": {
+            "orpha_code": "166024",
+            "name": _NAME_166024,
+            "parents": [{"orpha_code": "93419"}],
+        },
         "_meta": _meta("get_disease_classification", [_step("get_disease_ancestors", "166024")]),
     }
 
@@ -49,7 +51,7 @@ async def test_snapshot_get_disease_ancestors(facade: FastMCP) -> None:
     # ancestors 156 + 93419 are classification-only nodes (no disorder row -> name
     # is NULL/dropped), so ORDER BY d.name leaves their relative order undefined;
     # snapshot the closure SET, the stable invariant, not the row order.
-    ancestors = result.pop("ancestors")
+    ancestors = result.pop("results")
     assert sorted(ancestors, key=lambda r: r["orpha_code"]) == [
         {"orpha_code": "156"},
         {"orpha_code": "93419"},
@@ -70,7 +72,7 @@ async def test_snapshot_get_disease_ancestors(facade: FastMCP) -> None:
 async def test_snapshot_get_disease_descendants(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_descendants", term="ORPHA:156")
     # descendants closure is order-independent (see ancestors); snapshot the SET.
-    descendants = result.pop("descendants")
+    descendants = result.pop("results")
     assert sorted(descendants, key=lambda r: r["orpha_code"]) == [
         {
             "orpha_code": "166024",
@@ -98,11 +100,11 @@ async def test_snapshot_get_disease_descendants(facade: FastMCP) -> None:
 async def test_snapshot_map_cross_ontology(facade: FastMCP) -> None:
     result = await _call(facade, "map_cross_ontology", term=_ORPHA_166024)
     assert result["count"] == 5
-    assert result["mappings"]["OMIM"] == [_OMIM_607131]
-    assert result["mappings"]["MONDO"] == [
+    assert result["result"]["OMIM"] == [_OMIM_607131]
+    assert result["result"]["MONDO"] == [
         {"object_id": "0011778", "mapping_relation": "E", "validation_status": "Validated"}
     ]
-    assert sorted(result["mappings"]) == ["ICD-10", "ICD-11", "MONDO", "OMIM", "UMLS"]
+    assert sorted(result["result"]) == ["ICD-10", "ICD-11", "MONDO", "OMIM", "UMLS"]
     assert result["_meta"] == {
         "source": "orphanet",
         "tool": "map_cross_ontology",
@@ -121,7 +123,7 @@ async def test_snapshot_resolve_xref(facade: FastMCP) -> None:
         "xref_id": "OMIM:607131",
         "source": "OMIM",
         "object_id": "607131",
-        "matches": [
+        "results": [
             {
                 "orpha_code": "166024",
                 "name": _NAME_166024,

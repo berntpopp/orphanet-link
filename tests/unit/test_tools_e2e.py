@@ -60,7 +60,7 @@ async def test_get_server_capabilities_returns_tool_list(facade: FastMCP) -> Non
 async def test_resolve_disease_by_orpha_code(facade: FastMCP) -> None:
     result = await _call(facade, "resolve_disease", query=_ORPHA_KIF7)
     assert result["success"] is True
-    assert result["orpha_code"] == "166024"
+    assert result["result"]["orpha_code"] == "166024"
     assert "_meta" in result
     assert isinstance(result["_meta"]["next_commands"], list)
     # next step should be get_disease
@@ -95,9 +95,9 @@ async def test_get_disease_meta_source(facade: FastMCP) -> None:
 async def test_get_disease_alexander(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease", term=_ORPHA_58)
     assert result["success"] is True
-    assert result["name"] is not None
+    assert result["result"]["name"] is not None
     # The fixture has "Alexander disease" for ORPHA:58
-    assert "alexander" in result["name"].lower()
+    assert "alexander" in result["result"]["name"].lower()
     assert "_meta" in result
 
 
@@ -125,7 +125,7 @@ async def test_get_disease_genes_includes_kif7(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_genes", term=_ORPHA_KIF7)
     assert result["success"] is True
     assert "_meta" in result
-    genes = result.get("genes", [])
+    genes = result["results"]
     gene_symbols = [g.get("gene_symbol") for g in genes]
     assert "KIF7" in gene_symbols, f"KIF7 not found in {gene_symbols}"
 
@@ -134,7 +134,7 @@ async def test_get_disease_phenotypes_success(facade: FastMCP) -> None:
     result = await _call(facade, "get_disease_phenotypes", term=_ORPHA_58)
     assert result["success"] is True
     assert "_meta" in result
-    assert "phenotypes" in result
+    assert "results" in result
 
 
 async def test_get_disease_phenotypes_unknown_frequency_returns_invalid_input(
@@ -227,7 +227,7 @@ async def test_map_cross_ontology_groups_omim(facade: FastMCP) -> None:
     result = await _call(facade, "map_cross_ontology", term=_ORPHA_KIF7)
     assert result["success"] is True
     assert "_meta" in result
-    mappings = result.get("mappings", {})
+    mappings = result["result"]
     # The fixture has an OMIM cross-reference for ORPHA:166024
     assert "OMIM" in mappings, f"OMIM key missing from mappings: {list(mappings.keys())}"
 

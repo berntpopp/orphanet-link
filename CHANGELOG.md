@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-26
+
+### Changed
+
+- **Breaking:** every data tool's payload now sits under the Response-Envelope v1 §1 primary key, `results` (array) for a list and `result` (object) for a grouped mapping or a record. Counts, paging (`total`, `returned`, `limit`, `offset`, `truncated`, `next_offset`, `count`) and the identity echoes (`orpha_code`, `name`, `query`, ...) of a list tool stay at the envelope top level beside `results`; `orphanet_version` stays at the top level. A list tool always carries `results`, as `[]` when it has no rows (the lean modes used to drop the empty list). `get_server_capabilities` and `get_diagnostics` are unchanged. Old key to new key:
+
+  | Tool | Old | New |
+  |---|---|---|
+  | `search_diseases`, `find_diseases_by_gene`, `find_diseases_by_phenotype`, `get_disease_batch`, `resolve_disease_batch` | `results` | `results` (unchanged) |
+  | `get_disease_ancestors` | `ancestors` | `results` |
+  | `get_disease_descendants` | `descendants` | `results` |
+  | `get_disease_genes` | `genes` | `results` |
+  | `get_disease_phenotypes` | `phenotypes` | `results` |
+  | `get_disease_prevalence` | `prevalence` | `results` |
+  | `get_disease_disability` | `disability` | `results` |
+  | `resolve_xref` | `matches` | `results` |
+  | `map_cross_ontology` | `mappings` | `result` (`orpha_code`, `name`, `count` stay beside it) |
+  | `get_disease`, `resolve_disease`, `get_disease_classification`, `get_disease_natural_history` | every top-level field `<field>` (for example `orpha_code`, `name`, `xrefs`, `parents`) | `result.<field>` |
+
+- Conformance: the vendored envelope schema now applies in full; the strict-xfail exclusion of the `result`/`results` rule is removed.
+
 ## [0.8.0] - 2026-11-26
 
 ### Added

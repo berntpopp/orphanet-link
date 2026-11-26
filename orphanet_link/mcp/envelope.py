@@ -33,6 +33,7 @@ from orphanet_link.exceptions import (
 )
 from orphanet_link.mcp import metrics
 from orphanet_link.mcp.next_commands import cmd, default_error_next_commands, withdrawn_recovery
+from orphanet_link.mcp.payload import nest_payload
 from orphanet_link.mcp.untrusted_content import (
     UntrustedTextLimitError,
     sanitize_message,
@@ -457,6 +458,7 @@ async def run_mcp_tool(
             result["_meta"] = _shape_meta(meta, ctx.response_mode)
             _trim_version(result, ctx)
             metrics.record(tool_name, elapsed, ok=success, response_mode=ctx.response_mode)
+            nest_payload(tool_name, result)
         return result
     except Exception as exc:  # broad catch is the error-boundary contract
         elapsed = int((time.perf_counter() - start) * 1000)
