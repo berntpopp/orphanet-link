@@ -5,11 +5,11 @@ per-call token tax (see ``orphanet_link/mcp/envelope.py::_shape_meta``). These
 tests pin the EXACT key set each mode emits so a future change to the envelope
 cannot silently widen or narrow the contract:
 
-- ``minimal``  -> ``{tool, request_id, source, unsafe_for_clinical_use, data_version}``
-  (lean opt-out)
-- ``compact``  -> minimal PLUS ``{capabilities_version, next_commands}`` (no ``elapsed_ms``)
-- ``standard`` -> compact PLUS ``{elapsed_ms}``
-- ``full``     -> identical to ``standard``
+- ``minimal``  -> ``{tool, request_id, elapsed_ms, source, unsafe_for_clinical_use,
+  data_version, retrieved_at}`` (lean opt-out; the fields the Response-Envelope
+  Standard v1 §4 and v1.2 require on every result)
+- ``compact``  -> minimal PLUS ``{capabilities_version, next_commands}``
+- ``standard`` / ``full`` -> identical to ``compact``
 
 ``unsafe_for_clinical_use`` (fleet disclaimer standardization) is present at every
 tier -- it is a fixed research-use disclaimer, not tiered guidance.
@@ -29,9 +29,17 @@ _ORPHA_KIF7 = "ORPHA:166024"  # has KIF7 gene, OMIM xref, prevalence
 _ORPHA_58 = "ORPHA:58"  # "Alexander disease"
 
 #: The exact ``_meta`` key set emitted per ``response_mode``.
-_MINIMAL_META = {"tool", "request_id", "source", "unsafe_for_clinical_use", "data_version"}
+_MINIMAL_META = {
+    "tool",
+    "request_id",
+    "elapsed_ms",
+    "source",
+    "unsafe_for_clinical_use",
+    "data_version",
+    "retrieved_at",
+}
 _COMPACT_META = _MINIMAL_META | {"capabilities_version", "next_commands"}
-_STANDARD_META = _COMPACT_META | {"elapsed_ms"}
+_STANDARD_META = _COMPACT_META
 
 _EXPECTED_BY_MODE: dict[str, set[str]] = {
     "minimal": _MINIMAL_META,
@@ -62,18 +70,15 @@ async def test_get_disease_meta_key_set_is_exact_per_mode(facade: FastMCP, mode:
     assert set(result["_meta"].keys()) == _EXPECTED_BY_MODE[mode]
 
 
-async def test_compact_meta_omits_elapsed_ms(facade: FastMCP) -> None:
-    """``compact`` (the default) drops ``elapsed_ms`` from the hot path."""
-    result = await _call(facade, "get_disease", term=_ORPHA_KIF7, response_mode="compact")
-    assert "elapsed_ms" not in result["_meta"]
+async def test_provenance_names_the_release_and_its_download(facade: FastMCP) -> None:
+    """``data_version`` is the Orphadata release date, ``retrieved_at`` the index build."""
+    from orphanet_link.mcp.service_adapters import get_orphanet_service
 
-
-async def test_standard_adds_exactly_elapsed_ms_over_compact(facade: FastMCP) -> None:
-    """``standard`` is the compact set PLUS exactly ``{elapsed_ms}`` -- nothing else."""
-    compact = await _call(facade, "get_disease", term=_ORPHA_KIF7, response_mode="compact")
-    standard = await _call(facade, "get_disease", term=_ORPHA_KIF7, response_mode="standard")
-    extra = set(standard["_meta"].keys()) - set(compact["_meta"].keys())
-    assert extra == {"elapsed_ms"}
+    diag = get_orphanet_service().get_diagnostics()
+    meta = (await _call(facade, "get_disease", term=_ORPHA_KIF7, response_mode="minimal"))["_meta"]
+    assert meta["source"] == "orphanet"
+    assert meta["data_version"] == diag["orphanet_date"][:10]
+    assert meta["retrieved_at"] == diag["build_utc"][:19] + "Z"
 
 
 async def test_full_meta_matches_standard(facade: FastMCP) -> None:

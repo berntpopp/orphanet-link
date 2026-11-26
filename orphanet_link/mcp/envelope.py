@@ -54,8 +54,9 @@ _DATA_UNAVAILABLE_MESSAGE = (
 # lives ONLY in get_server_capabilities. Per-call _meta carries a fixed
 # research-use disclaimer (unsafe_for_clinical_use, present at every response_mode,
 # success and error paths -- fleet disclaimer standardization) plus dynamic
-# fields: tool, request_id, [next_commands, capabilities_version, elapsed_ms] --
-# and those three are tiered by response_mode (see _shape_meta).
+# fields: tool, request_id, elapsed_ms, the provenance (source, data_version,
+# retrieved_at) and [next_commands, capabilities_version] -- those two are tiered
+# by response_mode (see _shape_meta).
 #
 # Every code here is in the CLOSED enum of Response-Envelope Standard v1
 # (constants.ERROR_CODES). See _classify for the three legacy codes this backend
@@ -216,6 +217,7 @@ def _error_envelope(exc: BaseException, context: McpErrorContext) -> dict[str, A
         "_meta": {
             "tool": context.tool_name,
             "request_id": _request_id(),
+            "elapsed_ms": 0,
             "source": "orphanet",
             "unsafe_for_clinical_use": True,
         },
@@ -297,6 +299,7 @@ def build_arg_error_envelope(
             "_meta": {
                 "tool": tool_name,
                 "request_id": _request_id(),
+                "elapsed_ms": 0,
                 "source": "orphanet",
                 "unsafe_for_clinical_use": True,
                 "next_commands": [cmd("get_server_capabilities")],
@@ -322,6 +325,7 @@ def build_arg_error_envelope(
         "_meta": {
             "tool": tool_name,
             "request_id": _request_id(),
+            "elapsed_ms": 0,
             "source": "orphanet",
             "unsafe_for_clinical_use": True,
             "next_commands": [cmd("get_server_capabilities")],
@@ -329,14 +333,14 @@ def build_arg_error_envelope(
     }
 
 
-def _data_version() -> str | None:
-    """Cached short fingerprint of the loaded Orphanet release (never raises)."""
+def _provenance() -> dict[str, str]:
+    """Cached-index provenance (data_version, retrieved_at) for the ``_meta`` echo."""
     try:
-        from orphanet_link.mcp.capabilities import data_version
+        from orphanet_link.mcp.capabilities import provenance
 
-        return data_version()
+        return provenance()
     except Exception:  # pragma: no cover - the _meta echo must never break a tool
-        return None
+        return {}
 
 
 def _stamp_capabilities_version(meta: dict[str, Any]) -> None:
@@ -347,10 +351,8 @@ def _stamp_capabilities_version(meta: dict[str, Any]) -> None:
 
 
 def _stamp_data_version(meta: dict[str, Any]) -> None:
-    """Add the cached data_version release anchor to a ``_meta`` block when available."""
-    fingerprint = _data_version()
-    if fingerprint:
-        meta["data_version"] = fingerprint
+    """Add the release anchor and its download time (v1.2) to a ``_meta`` block."""
+    meta.update(_provenance())
 
 
 def _trim_version(result: dict[str, Any], ctx: McpErrorContext) -> None:
@@ -365,19 +367,26 @@ def _trim_version(result: dict[str, Any], ctx: McpErrorContext) -> None:
         result.pop("orphanet_version", None)
 
 
+#: ``_meta`` keys kept at ``minimal``: the trace essentials, the disclaimer, and the
+#: fields the Response-Envelope Standard requires on every result (v1 §4, v1.2).
+_MINIMAL_META_KEYS = (
+    "tool",
+    "request_id",
+    "elapsed_ms",
+    "source",
+    "unsafe_for_clinical_use",
+    "data_version",
+    "retrieved_at",
+)
+
+
 def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     """Tier ``_meta`` verbosity by ``response_mode`` to control the per-call token tax.
 
-    - ``minimal``: the trace essentials plus the data anchor --
-      ``{tool, request_id, source, unsafe_for_clinical_use, data_version}``. The caller
-      opted out of guidance, so ``next_commands`` / ``capabilities_version`` /
-      ``elapsed_ms`` are dropped, but ``data_version`` stays so even the leanest answer
-      is tied to its Orphanet release.
-    - ``compact`` (default): keep ``next_commands`` (workflow guidance) and
-      ``capabilities_version`` (the warm-client cache key the discovery contract leans
-      on), but drop the ``elapsed_ms`` observability echo from the hot path -- it is
-      still recorded server-side and surfaced by ``get_diagnostics``.
-    - ``standard`` / ``full``: the complete ``_meta``, including ``elapsed_ms``.
+    - ``minimal``: the trace essentials plus the provenance (``_MINIMAL_META_KEYS``).
+      The caller opted out of guidance, so ``next_commands`` / ``capabilities_version``
+      are dropped, but even the leanest answer is tied to its Orphanet release.
+    - ``compact`` (default) and richer: the complete ``_meta``.
 
     The universal ``next_commands`` invariant therefore holds for ``compact`` and
     richer (every default response still chains); ``minimal`` is the documented opt-out.
@@ -386,18 +395,8 @@ def _shape_meta(meta: dict[str, Any], response_mode: str) -> dict[str, Any]:
     disclaimer standardization; see the module docstring).
     """
     if response_mode == "minimal":
-        lean = {
-            "tool": meta["tool"],
-            "request_id": meta["request_id"],
-            "source": "orphanet",
-            "unsafe_for_clinical_use": True,
-        }
-        if "data_version" in meta:
-            lean["data_version"] = meta["data_version"]
-        return lean
-    if response_mode in ("standard", "full"):
-        return meta
-    return {k: v for k, v in meta.items() if k != "elapsed_ms"}
+        return {k: meta[k] for k in _MINIMAL_META_KEYS if k in meta}
+    return meta
 
 
 def error_result(envelope: dict[str, Any]) -> ToolResult:

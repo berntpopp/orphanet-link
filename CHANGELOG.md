@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-26
+
+### Added
+
+- Response-Envelope v1.2 provenance (#143): every successful data result carries `_meta.retrieved_at` (RFC 3339 UTC, `Z`: when the Orphadata release was downloaded and indexed) next to `_meta.source` and `_meta.data_version`, at every `response_mode`.
+- Conformance: the envelope JSON Schema (genefoundry-envelope v1.2.0, sha256-pinned) is vendored and every data tool is validated against it in-process; `tests/conformance/behaviour.py` is re-vendored with the provenance check.
+
+### Changed
+
+- `_meta.data_version` is now the Orphadata release date (for example `2025-12-09`), the identifier under which Orphanet publishes the data. It was an 8-character hash of the Orphadata schema-version string, which a reader could not check against a release.
+- `_meta.elapsed_ms` is now present at every `response_mode` and on every error envelope (v1 §4 requires it); `minimal` and `compact` used to drop it.
+
+### Known gaps
+
+- The payload is still returned flat beside `success`; the schema's `result`/`results` primary key (v1 §1) is not met and is tracked by a strict-xfail test.
+
 ## [0.7.0] - 2026-11-20
 
 ### Added

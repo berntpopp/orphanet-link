@@ -93,6 +93,7 @@ def unknown_tool_envelope() -> dict[str, Any]:
         "_meta": {
             # NO "tool" key: never echo the caller-supplied requested name.
             "request_id": _request_id(),
+            "elapsed_ms": 0,
             "source": "orphanet",
             "unsafe_for_clinical_use": True,
             "next_commands": [cmd("get_server_capabilities")],

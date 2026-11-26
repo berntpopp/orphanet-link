@@ -27,14 +27,15 @@ Every tool accepts `response_mode` ∈ `minimal | compact | standard | full`
 
 | Mode | Body | `_meta` keys |
 |---|---|---|
-| `minimal` | identity anchors only | `tool, request_id, source, data_version` |
+| `minimal` | identity anchors only | `tool, request_id, elapsed_ms, source, data_version, retrieved_at` |
 | `compact` (default) | null/empty dropped recursively; search hits get a snippet | `+ next_commands, capabilities_version` |
-| `standard` | full record | `+ elapsed_ms` |
-| `full` | full record | `+ elapsed_ms` |
+| `standard` | full record | as `compact` |
+| `full` | full record | as `compact` |
 
 The verbose human-readable `orphanet_version` string ships only in `standard` /
-`full`; the lean modes ground the call with the short `_meta.data_version` hash
-instead.
+`full`; the lean modes ground the call with `_meta.data_version` (the Orphadata
+release date) instead. `_meta.retrieved_at` is the UTC time that release was downloaded
+and indexed (Response-Envelope v1.2).
 
 `compact`+ echoes `capabilities_version` — a content hash of the discovery contract
 — so a warm client can skip re-fetching `get_server_capabilities`.

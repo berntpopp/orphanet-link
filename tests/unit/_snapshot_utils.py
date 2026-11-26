@@ -21,14 +21,21 @@ _NAME_58 = "Alexander disease"
 _OMIM_607131 = {"object_id": "607131", "mapping_relation": "E", "validation_status": "Validated"}
 
 #: _meta keys that vary per call or per release and must be dropped before compare.
-_VOLATILE_META = {"request_id", "elapsed_ms", "data_version", "capabilities_version"}
+_VOLATILE_META = {
+    "request_id",
+    "elapsed_ms",
+    "data_version",
+    "retrieved_at",
+    "capabilities_version",
+}
 
 
 def _normalize(obj: Any) -> Any:
     """Strip volatile fields recursively so snapshots are stable across releases.
 
     Drops the release-dependent top-level ``orphanet_version`` and the volatile
-    ``_meta`` sub-keys (request_id, elapsed_ms, data_version, capabilities_version);
+    ``_meta`` sub-keys (request_id, elapsed_ms, data_version, retrieved_at,
+    capabilities_version);
     keeps every other key and value.
     """
     if isinstance(obj, dict):
