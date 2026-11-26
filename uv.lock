@@ -1106,7 +1106,7 @@ wheels = [
 
 [[package]]
 name = "orphanet-link"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -1125,6 +1125,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "jsonschema" },
     { name = "lxml-stubs" },
     { name = "mypy" },
     { name = "pytest" },
@@ -1154,6 +1155,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jsonschema", specifier = ">=4.23.0,<5.0.0" },
     { name = "lxml-stubs", specifier = ">=0.5.0" },
     { name = "mypy", specifier = ">=1.13.0,<3.0.0" },
     { name = "pytest", specifier = ">=8.3.0,<10.0.0" },

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from orphanet_link import __version__
@@ -126,28 +127,25 @@ def capabilities_version() -> str:
     return cached
 
 
-#: Per-release fingerprint cache for the lean ``_meta`` data anchor (see ``data_version``).
-_DATA_VERSION_CACHE: dict[str, str] = {}
+def provenance() -> dict[str, str]:
+    """Response-Envelope v1.2 ``_meta`` provenance of the loaded index (empty if unbuilt).
 
-
-def data_version() -> str | None:
-    """Short, stable fingerprint (8 hex chars) of the loaded Orphanet release, or ``None``.
-
+    ``data_version`` is the Orphadata release date (the upstream names a release by its
+    file date); ``retrieved_at`` is when the index was built, right after the download.
     Echoed in every ``_meta`` -- including ``minimal`` -- so a consumer can always tie an
-    answer to the exact data release and detect when it changes between calls. The
-    human-readable release string + counts live in get_diagnostics / capabilities.
+    answer to the exact data release and detect when it changes between calls.
     """
-    release = _orphanet_version()
-    if release is None:
-        return None
-    cached = _DATA_VERSION_CACHE.get(release)
-    if cached is None:
-        metrics.record_cache("data_version", hit=False)
-        cached = hashlib.sha256(release.encode("utf-8")).hexdigest()[:8]
-        _DATA_VERSION_CACHE[release] = cached
-    else:
-        metrics.record_cache("data_version", hit=True)
-    return cached
+    diag = _diag()
+    out: dict[str, str] = {}
+    release = str(diag.get("orphanet_date") or diag.get("orphanet_version") or "")
+    if release:
+        out["data_version"] = release[:10] if diag.get("orphanet_date") else release
+    try:
+        built = datetime.fromisoformat(str(diag.get("build_utc"))).astimezone(UTC)
+        out["retrieved_at"] = built.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:  # unbuilt index or an unreadable stamp
+        pass
+    return out
 
 
 def build_capabilities() -> dict[str, Any]:
@@ -184,19 +182,20 @@ def build_capabilities() -> dict[str, Any]:
             "request_id",
             "source",
             "data_version",
+            "retrieved_at",
             "elapsed_ms",
             "capabilities_version",
             "next_commands",
         ],
         "per_call_meta_semantics": (
             "_meta verbosity is tiered by response_mode to control the per-call token "
-            "tax: minimal returns {tool, request_id, source, data_version}; compact "
-            "(default) adds next_commands (workflow guidance) and capabilities_version "
-            "(the warm-client cache key) but omits elapsed_ms; standard/full add "
-            "elapsed_ms. source and data_version (a short fingerprint of the loaded "
-            "Orphanet release) are present in EVERY tier so any answer can be tied to "
-            "its backend and data version; every compact or richer response also "
-            "carries next_commands."
+            "tax: minimal returns {tool, request_id, elapsed_ms, source, data_version, "
+            "retrieved_at}; compact (default) and richer add next_commands (workflow "
+            "guidance) and capabilities_version (the warm-client cache key). source, "
+            "data_version (the Orphadata release date) and retrieved_at (UTC time the "
+            "release was downloaded and indexed) are present in EVERY tier so any answer "
+            "can be tied to its backend and data release; every compact or richer "
+            "response also carries next_commands."
         ),
         "capabilities_version_semantics": (
             "_meta.capabilities_version is a content hash of this discovery contract. "
